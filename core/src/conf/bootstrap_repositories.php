@@ -26,7 +26,7 @@
  */
 defined('AJXP_EXEC') or die( 'Access not allowed');
 
-$REPOSITORIES[0] = array(
+/*$REPOSITORIES[0] = array(
 	"DISPLAY"		=>	"Default Files",
     "DISPLAY_ID"    =>  430,
     "DESCRIPTION_ID"=>  475,
@@ -37,7 +37,7 @@ $REPOSITORIES[0] = array(
 		"CREATE"		=>	true,
 		"RECYCLE_BIN" 	=> 	'recycle_bin',
 		"CHMOD_VALUE"   =>  '0600',
-		"DEFAULT_RIGHTS"=>  "",
+		"DEFAULT_RIGHTS"=>  "r",
 		"PAGINATION_THRESHOLD" => 500,
 		"PAGINATION_NUMBER" => 200,
 		"META_SOURCES"		=> array(
@@ -102,6 +102,7 @@ $REPOSITORIES[1] = array(
 	),
 
 );
+*/
 
 // DO NOT REMOVE THIS!
 // SHARE ELEMENTS
