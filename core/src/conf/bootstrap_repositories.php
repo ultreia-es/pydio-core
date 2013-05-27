@@ -111,7 +111,7 @@ $REPOSITORIES["ajxp_shared"] = array(
 	"DISPLAY_ID"		=>	"467",
 	"DRIVER"		=>	"ajxp_shared",
 	"DRIVER_OPTIONS"=> array(
-		"DEFAULT_RIGHTS" => "rw"
+		"DEFAULT_RIGHTS" => ""
 	)
 );
 
