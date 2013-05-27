@@ -106,14 +106,14 @@ $REPOSITORIES[1] = array(
 
 // DO NOT REMOVE THIS!
 // SHARE ELEMENTS
-$REPOSITORIES["ajxp_shared"] = array(
+/*$REPOSITORIES["ajxp_shared"] = array(
 	"DISPLAY"		=>	"Shared Elements",
 	"DISPLAY_ID"		=>	"467",
 	"DRIVER"		=>	"ajxp_shared",
 	"DRIVER_OPTIONS"=> array(
 		"DEFAULT_RIGHTS" => ""
 	)
-);
+);*/
 
 // ADMIN REPOSITORY
 $REPOSITORIES["ajxp_conf"] = array(
