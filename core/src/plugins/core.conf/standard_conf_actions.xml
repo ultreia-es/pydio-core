@@ -422,18 +422,5 @@
                 ]]></clientCallback>
             </processing>
         </action>
-        <action name="switch_to_shared_elements">
-            <gui src="drive_remote.png" text="467" title="467" hasAccessKey="false" iconClass="icon-share" >
-                <context dir="false" recycle="true" selection="false" actionBar="false" actionBarGroup="utils" ajxpWidgets="UserWidget::logging_string"/>
-            </gui>
-            <rightsContext adminOnly="false" noUser="false" read="false" userLogged="only" write="false"/>
-            <processing>
-                <clientCallback><![CDATA[
-                    if(!ajaxplorer.repositoryId || ajaxplorer.repositoryId != "ajxp_shared"){
-                        ajaxplorer.triggerRepositoryChange('ajxp_shared');
-                    }
-                ]]></clientCallback>
-            </processing>
-        </action>
 	</actions>
 </registry_contributions>
