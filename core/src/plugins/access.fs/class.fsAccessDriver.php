@@ -258,51 +258,6 @@ class fsAccessDriver extends AbstractAccessDriver implements AjxpWrapperProvider
 
                 break;
 
-            case "prepare_chunk_dl" :
-
-                $chunkCount = intval($httpVars["chunk_count"]);
-                $fileId = $this->urlBase.$selection->getUniqueFile();
-                $sessionKey = "chunk_file_".md5($fileId.time());
-                $totalSize = $this->filesystemFileSize($fileId);
-                $chunkSize = intval ( $totalSize / $chunkCount );
-                $realFile  = call_user_func(array($this->wrapperClassName, "getRealFSReference"), $fileId, true);
-                $chunkData = array(
-                    "localname"	  => basename($fileId),
-                    "chunk_count" => $chunkCount,
-                    "chunk_size"  => $chunkSize,
-                    "total_size"  => $totalSize,
-                    "file_id"	  => $sessionKey
-                );
-
-                $_SESSION[$sessionKey] = array_merge($chunkData, array("file"=>$realFile));
-                HTMLWriter::charsetHeader("application/json");
-                print(json_encode($chunkData));
-
-                $node = $selection->getUniqueNode($this);
-                AJXP_Controller::applyHook("node.read", array(&$node));
-
-                break;
-
-            case "download_chunk" :
-
-                $chunkIndex = intval($httpVars["chunk_index"]);
-                $chunkKey = $httpVars["file_id"];
-                $sessData = $_SESSION[$chunkKey];
-                $realFile = $sessData["file"];
-                $chunkSize = $sessData["chunk_size"];
-                $offset = $chunkSize * $chunkIndex;
-                if ($chunkIndex == $sessData["chunk_count"]-1) {
-                    // Compute the last chunk real length
-                    $chunkSize = $sessData["total_size"] - ($chunkSize * ($sessData["chunk_count"]-1));
-                    if (call_user_func(array($this->wrapperClassName, "isRemote"))) {
-                        register_shutdown_function("unlink", $realFile);
-                    }
-                }
-                $this->readFile($realFile, "force-download", $sessData["localname"].".".sprintf("%03d", $chunkIndex+1), false, false, true, $offset, $chunkSize);
-
-
-            break;
-
             case "compress" :
                     // Make a temp zip and send it as download
                     $loggedUser = AuthService::getLoggedUser();
