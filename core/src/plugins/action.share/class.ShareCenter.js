@@ -350,6 +350,8 @@ Class.create("ShareCenter", {
                     oForm.down('div#generate_indicator').show();
                     this.loadSharedElementData(this.currentNode, function(json){
                         oForm.down('[id="share_container"]').value = json['publiclet_link'];
+                        if ($('clippy_text_param')) $('clippy_text_param').value = 'text=' + json['publiclet_link'];
+                        if ($('clippy_embed')) $('clippy_embed').FlashVars = 'text=' + json['publiclet_link'];
                         oForm.down('div#generate_indicator').hide();
                         var optionsPane = oForm.down('div#share_optional_fields');
                         if(json['expire_time']){
@@ -581,6 +583,8 @@ Class.create("ShareCenter", {
                     });
                 }
             });
+            if ($('clippy_text_param')) $('clippy_text_param').value = 'text=' + cont.value;
+            if ($('clippy_embed')) $('clippy_embed').setAttribute('flashVars', 'text=' + cont.value);
         };
         conn.sendSync();
     },
