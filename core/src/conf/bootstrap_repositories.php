@@ -31,76 +31,20 @@ $REPOSITORIES[0] = array(
     "DISPLAY_ID"    =>  430,
     "DESCRIPTION_ID"=>  475,
 	"AJXP_SLUG"		=>  "default",
-	"DRIVER"		=>	"fs",
+	"DRIVER"		=>	"ftp",
 	"DRIVER_OPTIONS"=> array(
-		"PATH"			=>	"AJXP_DATA_PATH/files",
-		"CREATE"		=>	true,
-		"RECYCLE_BIN" 	=> 	'recycle_bin',
-		"CHMOD_VALUE"   =>  '0600',
-		"DEFAULT_RIGHTS"=>  "",
-		"PAGINATION_THRESHOLD" => 500,
-		"PAGINATION_NUMBER" => 200,
-		"META_SOURCES"		=> array(
-			"metastore.serial"=> array(
-				"METADATA_FILE"	=> ".ajxp_meta",
-                "METADATA_FILE_LOCATION" => "infolders"
-            ),
-            "meta.user"     => array(
-				"meta_fields"		=> "tags",
-				"meta_labels"		=> "Tags",
-                "meta_visibility"   => "hidden"
-			),
-            "meta.filehasher"   => array(),
-            "meta.watch"        => array(),
-            "meta.exif"   => array(
-                "meta_fields" => "COMPUTED_GPS.GPS_Latitude,COMPUTED_GPS.GPS_Longitude",
-                "meta_labels" => "Latitude,Longitude"
-            ),
-            "index.lucene" => array(
-                "index_meta_fields" => "tags"
-            ),
-		)
-	),
-
-);
-
-$REPOSITORIES[1] = array(
-	"DISPLAY"		=>	"My Files",
-    "DISPLAY_ID"    =>  432,
-    "DESCRIPTION_ID"=>  476,
-	"AJXP_SLUG"		=>  "my-files",
-	"DRIVER"		=>	"fs",
-	"DRIVER_OPTIONS"=> array(
-		"PATH"			=>	"AJXP_DATA_PATH/personal/AJXP_USER",
-		"CREATE"		=>	true,
-		"RECYCLE_BIN" 	=> 	'recycle_bin',
-		"CHMOD_VALUE"   =>  '0600',
+		"FTP_HOST" => "localhost",
+		"FTP_PORT" => 21,
+		"PATH" => "/",
+		"FTP_DIRECT" => true,
+		"USE_SESSION_CREDENTIALS" => true,
+		"RECYCLE_BIN" => "recycle_bin",
+		"CHMOD_VALUE" => "0600",
 		"DEFAULT_RIGHTS"=>  "rw",
 		"PAGINATION_THRESHOLD" => 500,
 		"PAGINATION_NUMBER" => 200,
-		"META_SOURCES"		=> array(
-			"metastore.serial"=> array(
-				"METADATA_FILE"	=> ".ajxp_meta",
-                "METADATA_FILE_LOCATION" => "infolders"
-            ),
-            "meta.user"     => array(
-				"meta_fields"		=> "tags",
-				"meta_labels"		=> "Tags",
-                "meta_visibility"   => "hidden"
-			),
-            "meta.filehasher"   => array(),
-            "meta.watch"        => array(),
-            "meta.exif"   => array(
-                "meta_fields" => "COMPUTED_GPS.GPS_Latitude,COMPUTED_GPS.GPS_Longitude",
-                "meta_labels" => "Latitude,Longitude"
-            ),
-            "index.lucene" => array(
-                "index_meta_fields" => "tags",
-                "repository_specific_keywords" => "AJXP_USER",
-            )
++		"TMP_UPLOAD" => "/tmp"
 		)
-	),
-
 );
 
 // DO NOT REMOVE THIS!
