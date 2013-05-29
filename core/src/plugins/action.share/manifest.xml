@@ -113,6 +113,32 @@
                                 <div class="dialogContentMainTitle" ajxp_message_id="share_center.29">AJXP_MESSAGE[share_center.29]</div>
                                 <div id="generate_indicator" style="position:absolute;top:2px;right:4px;display:none;"><img src="AJXP_THEME_FOLDER/images/autocompleter-loader.gif"></div>
                                 <textarea id="share_container" style="padding: 4px;width: 266px;height: 33px;margin:0 10px; font-size:13px;"></textarea>
+                                <div style="float: left; margin: 3px 0 0 5px">
+                                  <object classid="clsid:d27cdb6e-ae6d-11cf-96b8-444553540000"
+                                             width="110"
+                                             height="14"
+                                             id="clippy" >
+                                      <param name="movie" value="AJXP_THEME_FOLDER/swf/clippy.swf">
+                                      <param name="allowScriptAccess" value="always">
+                                      <param name="quality" value="high">
+                                      <param name="scale" value="noscale">
+                                      <param name="FlashVars" value="text=#{text}" id="clippy_text_param">
+                                      <param name="bgcolor" value="white">
+                                      <embed src="AJXP_THEME_FOLDER/swf/clippy.swf"
+                                            id="clippy_embed"
+                                            width="110"
+                                            height="14"
+                                            name="clippy"
+                                            quality="high"
+                                            allowScriptAccess="always"
+                                            type="application/x-shockwave-flash"
+                                            pluginspage="http://www.macromedia.com/go/getflashplayer"
+                                            FlashVars="text=#{text}"
+                                            bgcolor="white"
+                                      />
+                                      </object>
+                                    </div>
+                                    <div style="clear: both"></div>
                             </div>
                         </div>
                         <div id="share_folder_chooser" box_width="320">
