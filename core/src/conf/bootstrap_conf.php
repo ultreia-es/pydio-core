@@ -56,4 +56,4 @@ $AJXP_INISET = array();
  * If you want to force the https, uncomment the line below. This will automatically
  * redirect all calls to ajaxplorer via http to the same URL with https
  */
-//define("AJXP_FORCE_SSL_REDIRECT", true);
+define("AJXP_FORCE_SSL_REDIRECT", true);
