@@ -2,3 +2,12 @@ ErrorDocument 404 https://www.grandesficheros.com/data/public/404.html
 <Files ".ajxp_*">
 deny from all
 </Files>
+            <IfModule mod_rewrite.c>
+            RewriteEngine on
+            RewriteBase /data/public
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule ^([a-z0-9]+)-([a-z]+)$ $1.php?lang=$2 [L]
+            RewriteRule ^([a-z0-9]+)$ $1.php [L]
+            </IfModule>
+            
