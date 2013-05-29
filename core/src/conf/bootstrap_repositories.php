@@ -43,7 +43,7 @@ $REPOSITORIES[0] = array(
 		"DEFAULT_RIGHTS"=>  "rw",
 		"PAGINATION_THRESHOLD" => 500,
 		"PAGINATION_NUMBER" => 200,
-+		"TMP_UPLOAD" => "/tmp"
+		"TMP_UPLOAD" => "/tmp"
 		)
 );
 
