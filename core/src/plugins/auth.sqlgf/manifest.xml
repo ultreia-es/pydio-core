@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<authdriver name="sqlgf" label="GrandesFicheros.com" description="CONF_MESSAGE[Use GrandesFicheros.com SQL authentication.]" mixins="authdriver_commons" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="file:../core.ajaxplorer/ajxp_registry.xsd">
+  <client_settings>
+    <resources>
+      <i18n namespace="sql_auth" path="plugins/auth.sql/i18n"/>
+    </resources>
+  </client_settings>
+  <server_settings>
+    <param name="SQL_DRIVER" type="group_switch:dibi" label="CONF_MESSAGE[Connexion]" description="CONF_MESSAGE[The Database Connexion]" mandatory="true"/>
+    <param type="button" name="INSTALL_SQL" choices="run_plugin_action:auth.sql:installSQLTables" label="CONF_MESSAGE[SQL Tables]" description="CONF_MESSAGE[Install SQL Tables]" mandatory="false"/>
+  </server_settings>
+  <class_definition filename="plugins/auth.sqlgf/class.sqlgfAuthDriver.php" classname="sqlgfAuthDriver"/>
+  <registry_contributions>
+    <external_file filename="plugins/core.auth/standard_auth_actions.xml" include="actions/*" exclude="actions/action[@name='pass_change']"/>
+    <actions>
+      <action name="pass_change">
+        <gui text="194" title="194" src="yast_security.png" iconClass="icon-key" accessKey="" hasAccessKey="false">
+          <context selection="false" dir="" recycle="true" ajxpWidgets="UserWidget::logging_string"></context>
+        </gui>
+        <processing>
+          <clientCallback prepareModal="true"><![CDATA[
+            location.href = 'https://webmail.ticaas.net/?_task=settings&_action=plugin.password';
+          ]]></clientCallback>
+          <serverCallback methodName="switchAction"></serverCallback>
+        </processing>
+      </action>
+    </actions>
+  </registry_contributions>
+  <dependencies>
+    <pluginClass pluginName="auth.sql"/>
+  </dependencies>		
+</authdriver>
