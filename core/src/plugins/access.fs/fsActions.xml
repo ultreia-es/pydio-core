@@ -791,39 +791,6 @@
 				<serverCallback methodName="switchAction"></serverCallback>
 				</processing>
 		</action>
-        <action name="chmod">
-            <gui text="287" title="287" src="ksysv.png" iconClass="icon-th" accessKey="" hasAccessKey="false">
-                <context selection="true" dir="true" recycle="hidden"  behaviour="hidden"
-                    actionBar="true" contextMenu="false" infoPanel="true"
-                    actionBarGroup="change" inZip="false">
-                </context>
-                <selectionContext dir="true" file="true" recycle="false" unique="false" allowedMimes="" behaviour="hidden"/>
-            </gui>
-            <rightsContext noUser="true" userLogged="only" read="true" write="true" adminOnly=""/>
-            <processing>
-                <clientCallback prepareModal="true"><![CDATA[
-                    var userSelection =  ajaxplorer.getUserSelection();
-                    var loadFunc = function(oForm){
-                        ajaxplorer.actionBar.propertyPane = new PropertyPanel(userSelection, oForm);
-                    };
-                    var completeFunc = function(){
-                        if(!ajaxplorer.actionBar.propertyPane.valueChanged()){
-                            hideLightBox();
-                            return false;
-                        }
-                        userSelection.updateFormOrUrl(modal.getForm());
-                        ajaxplorer.actionBar.submitForm(modal.getForm());
-                        hideLightBox();
-                        return false;
-                    };
-                    modal.showDialogForm('Edit Online', 'properties_box', loadFunc, completeFunc);
-                    ]]></clientCallback>
-                <clientForm id="properties_box"><![CDATA[
-                    <div id="properties_box" action="chmod" box_width="180"></div>
-                ]]></clientForm>
-                <serverCallback methodName="switchAction"></serverCallback>
-                </processing>
-        </action>
         <action name="download_chunk">
             <gui text="397" title="398" src="download_manager.png" iconClass="icon-cloud-download" hasAccessKey="false">
                 <context selection="true" dir="" recycle="false"

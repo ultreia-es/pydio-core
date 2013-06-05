@@ -551,31 +551,6 @@ class fsAccessDriver extends AbstractAccessDriver implements AjxpWrapperProvider
 			break;
 			
 			//------------------------------------
-			//	CHANGE FILE PERMISSION
-			//------------------------------------
-			case "chmod";
-			
-				$messtmp="";
-				$files = $selection->getFiles();
-				$changedFiles = array();
-				$chmod_value = $httpVars["chmod_value"];
-				$recursive = $httpVars["recursive"];
-				$recur_apply_to = $httpVars["recur_apply_to"];
-				foreach ($files as $fileName){
-					$error = $this->chmod($fileName, $chmod_value, ($recursive=="on"), ($recursive=="on"?$recur_apply_to:"both"), $changedFiles);
-				}
-				if(isSet($error)){
-					throw new AJXP_Exception($error);
-				}
-				//$messtmp.="$mess[34] ".SystemTextEncoding::toUTF8($filename)." $mess[39] ";
-				$logMessage="Successfully changed permission to ".$chmod_value." for ".count($changedFiles)." files or folders";
-                AJXP_Logger::logAction("Chmod", array("dir"=>$this->addSlugToPath($dir), "filesCount"=>count($changedFiles)));
-                if(!isSet($nodesDiffs)) $nodesDiffs = $this->getNodesDiffArray();
-                $nodesDiffs["UPDATE"] = array_merge($nodesDiffs["UPDATE"], $selection->buildNodes($this));
-
-			break;
-			
-			//------------------------------------
 			//	UPLOAD
 			//------------------------------------	
 			case "upload":
