@@ -118,7 +118,7 @@ class AJXP_NotificationCenter extends AJXP_Plugin
                 if($rightString == "r" | $rightString == "rw") $authRepos[] = $repoId;
             }
         }
-        $res = $this->eventStore->loadEvents($authRepos, $userId, $userGroup, 0, 10);
+        $res = $this->eventStore->loadEvents($authRepos, $userId, $userGroup, 0, 100);
         $mess = ConfService::getMessages();
         $format = "html";
         if(isSet($httpVars["format"])){
