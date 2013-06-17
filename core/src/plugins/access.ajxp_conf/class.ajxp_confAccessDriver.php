@@ -1535,7 +1535,7 @@ class ajxp_confAccessDriver extends AbstractAccessDriver
         }
 		AJXP_XMLWriter::sendFilesListComponentConfig($columns);
 		if(!AuthService::usersEnabled()) return ;
-        $USER_PER_PAGE = 50;
+        $USER_PER_PAGE = 100000;
         if(empty($hashValue)) $hashValue = 1;
         if($root == "users") $baseGroup = "/";
         else $baseGroup = substr($root, strlen("users"));
