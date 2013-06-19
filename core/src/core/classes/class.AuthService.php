@@ -353,7 +353,11 @@ class AuthService
 		if($authDriver->autoCreateUser() && !$user->storageExists()){
 			$user->save("superuser"); // make sure update rights now
 		}
-		AJXP_Logger::logAction("Log In");
+		global $server;
+		if (get_class($server) == "Sabre\DAV\Server")
+      AJXP_Logger::logAction("Log In", array("via" => "WebDAV"));
+    else
+      AJXP_Logger::logAction("Log In");
 		return 1;
 	}
 	/**
