@@ -449,7 +449,8 @@ abstract class AbstractConfDriver extends AJXP_Plugin {
 					$user->save("user");
 				}
 				//$logMessage = "Successfully Switched!";
-				AJXP_Logger::logAction("Switch Repository", array("rep. id"=>$repository_id));
+				$repositories = ConfService::getRepositoriesList("user");
+				AJXP_Logger::logAction("Switch Repository", array("rep. slug"=>$repositories[$repository_id]->getSlug()));
 				
 			break;	
 									
