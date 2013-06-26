@@ -152,14 +152,14 @@ class fsAccessDriver extends AbstractAccessDriver implements AjxpWrapperProvider
 			$orig_files = $selection->files;
 		elseif (is_string($selection))
 			// As passed by destination parameter
-			return $this->repository->slug.$selection;
+			return "//".$this->repository->slug.$selection;
 		else
 			// Unrecognized
 			return $selection;
 
 		$files = array();
 		foreach ($orig_files as $file)
-			$files[] = $this->repository->slug.$file;
+			$files[] = "//".$this->repository->slug.$file;
 		return $files;
 	}
 
