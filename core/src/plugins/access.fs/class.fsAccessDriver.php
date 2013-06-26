@@ -202,7 +202,7 @@ class fsAccessDriver extends AbstractAccessDriver implements AjxpWrapperProvider
 			//	DOWNLOAD
 			//------------------------------------
 			case "download":
-				AJXP_Logger::logAction("Download", array("files"=>$this->addSlugToPath($selection)));
+				AJXP_Logger::logAction("Download", array("file"=>$this->addSlugToPath($selection)));
 				@set_error_handler(array("HTMLWriter", "javascriptErrorHandler"), E_ALL & ~ E_NOTICE);
 				@register_shutdown_function("restore_error_handler");
 				$zip = false;
@@ -336,7 +336,7 @@ class fsAccessDriver extends AbstractAccessDriver implements AjxpWrapperProvider
 			case "get_content":
 					
 				$dlFile = $this->urlBase.$selection->getUniqueFile();
-				AJXP_Logger::logAction("Get_content", array("files"=>$this->addSlugToPath($selection)));
+				AJXP_Logger::logAction("Get_content", array("file"=>$this->addSlugToPath($selection)));
 				if(AJXP_Utils::getStreamingMimeType(basename($dlFile))!==false){
 					$this->readFile($this->urlBase.$selection->getUniqueFile(), "stream_content");					
 				}else{
@@ -416,9 +416,9 @@ class fsAccessDriver extends AbstractAccessDriver implements AjxpWrapperProvider
                     if(isSet($httpVars["force_copy_delete"])){
                         $errorMessage = $this->delete($selection->getFiles(), $logMessages);
                         if($errorMessage) throw new AJXP_Exception(SystemTextEncoding::toUTF8($errorMessage));
-                        AJXP_Logger::logAction("Copy/Delete", array("files"=>$this->addSlugToPath($selection), "destination" => $this->addSlugToPath($dest)));
+                        AJXP_Logger::logAction("Copy/Delete", array("file"=>$this->addSlugToPath($selection), "destination" => $this->addSlugToPath($dest)));
                     }else{
-                        AJXP_Logger::logAction(($action=="move"?"Move":"Copy"), array("files"=>$this->addSlugToPath($selection), "destination"=>$this->addSlugToPath($dest)));
+                        AJXP_Logger::logAction(($action=="move"?"Move":"Copy"), array("file"=>$this->addSlugToPath($selection), "destination"=>$this->addSlugToPath($dest)));
                     }
                     $logMessage = join("\n", $success);
 				}
@@ -453,7 +453,7 @@ class fsAccessDriver extends AbstractAccessDriver implements AjxpWrapperProvider
 					$logMessage = join("\n", $logMessages);
 				}
 				if($errorMessage) throw new AJXP_Exception(SystemTextEncoding::toUTF8($errorMessage));
-				AJXP_Logger::logAction("Delete", array("files"=>$this->addSlugToPath($selection)));
+				AJXP_Logger::logAction("Delete", array("file"=>$this->addSlugToPath($selection)));
                 if(!isSet($nodesDiffs)) $nodesDiffs = $this->getNodesDiffArray();
                 $nodesDiffs["REMOVE"] = array_merge($nodesDiffs["REMOVE"], $selection->getFiles());
 				
