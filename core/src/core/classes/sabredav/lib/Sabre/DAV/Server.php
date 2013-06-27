@@ -645,7 +645,7 @@ class Server {
 
         }
         $repositories = \ConfService::getRepositoriesList("user");
-        \AJXP_Logger::logAction("Download", array("file"=>"//".$repositories[\ConfService::getCurrentRepositoryId()]->getSlug()."/".$uri));
+        \AJXP_Logger::logAction("Download", array("file.dav"=>"//".$repositories[\ConfService::getCurrentRepositoryId()]->getSlug()."/".$uri));
 
     }
 
@@ -907,7 +907,7 @@ class Server {
 
         }
         $repositories = \ConfService::getRepositoriesList("user");
-        \AJXP_Logger::logAction("Upload", array("file"=>"//".$repositories[\ConfService::getCurrentRepositoryId()]->getSlug()."/".$uri));
+        \AJXP_Logger::logAction("Upload", array("file.dav"=>"//".$repositories[\ConfService::getCurrentRepositoryId()]->getSlug()."/".$uri));
 
     }
 
