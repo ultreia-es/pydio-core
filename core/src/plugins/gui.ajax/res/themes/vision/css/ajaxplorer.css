@@ -1660,11 +1660,11 @@ div.header_resizer div.header_cell.descending div.header_label
 
 div.header_resizer div.resizer{
     float:left;
-    width:1px;
+    width:0px;
     background-color: #fff;
     height: 26px;
     cursor:e-resize;
-    border: 0;
+    border-right:1px solid #C2C4C7;
 
 }
 

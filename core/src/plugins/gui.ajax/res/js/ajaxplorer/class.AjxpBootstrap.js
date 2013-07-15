@@ -241,7 +241,7 @@ Class.create("AjxpBootstrap", {
             }else{
                 customWording = this.parameters.get("customWording");
             }
-			html+='	<div id="progressBox" class="dialogBox" style="width: 320px;display:block;top:30%;z-index:2002;left:40%;position: absolute;background-color: #fff;padding: 0;">';
+			html+='	<div id="progressBox" class="dialogBox" style="width: 640px;display:block;top:30%;z-index:2002;left:40%;position: absolute;background-color: #fff;padding: 0;">';
 			html+='	<div align="left" class="dialogContent" style="color:#676965;font-family:Trebuchet MS,sans-serif;font-size:11px;font-weight:normal;left:10px;padding:10px;">';
 			var icon = customWording.icon || ajxpResourcesFolder+'/../../../AjxpLogo250.png';
             if(customWording.icon_binary_url){
