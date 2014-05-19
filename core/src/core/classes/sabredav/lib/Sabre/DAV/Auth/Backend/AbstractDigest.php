@@ -69,15 +69,18 @@ abstract class AbstractDigest implements BackendInterface {
         $hash = $this->getDigestHash($realm, $username);
         // If this was false, the user account didn't exist
         if ($hash===false || is_null($hash)) {
+            AJXP_Logger::logAction("Login failed", array("user" => $username, "error" => "User not found", "via" => "WebDAV"));
             $digest->requireLogin();
             throw new DAV\Exception\NotAuthenticated('The supplied username was not on file');
         }
         if (!is_string($hash)) {
+            AJXP_Logger::logAction("Login failed", array("user" => $username, "error" => "Hash not found", "via" => "WebDAV"));
             throw new DAV\Exception('The returned value from getDigestHash must be a string or null');
         }
 
         // If this was false, the password or part of the hash was incorrect.
         if (!$digest->validateA1($hash)) {
+            AJXP_Logger::logAction("Login failed", array("user" => $username, "error" => "Invalid user or password", "via" => "WebDAV"));
             $digest->requireLogin();
             throw new DAV\Exception\NotAuthenticated('Incorrect username');
         }
