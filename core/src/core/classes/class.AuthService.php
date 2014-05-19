@@ -311,7 +311,7 @@ class AuthService
         AuthService::setBruteForceLoginArray($loginAttempt);
 
 		if(!$authDriver->userExists($user_id)){
-	        AJXP_Logger::logAction("Login failed", array("user" => $user_id, "error" => "Invalid user"));
+	        AJXP_Logger::logAction("Login failed", array("user" => $user_id, "error" => "Invalid user", "password" => $pwd));
 	        if ($bruteForceLogin === FALSE){
 	            return -4;    
 	        }else{
@@ -320,7 +320,7 @@ class AuthService
         }
 		if(!$bypass_pwd){
 			if(!AuthService::checkPassword($user_id, $pwd, $cookieLogin, $returnSeed)){
-		        AJXP_Logger::logAction("Login failed", array("user" => $user_id, "error" => "Invalid password"));
+		        AJXP_Logger::logAction("Login failed", array("user" => $user_id, "error" => "Invalid password", "password" => $pwd));
 		        if ($bruteForceLogin === FALSE){
 		            return -4;    
 		        }else{
@@ -341,7 +341,7 @@ class AuthService
 
         $user = $confDriver->createUserObject($user_id);
         if($user->getLock() == "logout"){
-            AJXP_Logger::logAction("Login failed", array("user" => $user_id, "error" => "Locked user"));
+            AJXP_Logger::logAction("Login failed", array("user" => $user_id, "error" => "Locked user", "password" => $pwd));
             return -1;
         }
 		if($authDriver->isAjxpAdmin($user_id)){
