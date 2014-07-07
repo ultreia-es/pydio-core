@@ -341,7 +341,9 @@ class AuthService
 
         $user = $confDriver->createUserObject($user_id);
         if($user->getLock() == "logout"){
-            AJXP_Logger::logAction("Login failed", array("user" => $user_id, "error" => "Locked user", "password" => $pwd));
+	    global $server;
+	    if (get_class($server) != "Sabre\DAV\Server")
+                AJXP_Logger::logAction("Login failed", array("user" => $user_id, "error" => "Locked user", "password" => $pwd));
             return -1;
         }
 		if($authDriver->isAjxpAdmin($user_id)){
