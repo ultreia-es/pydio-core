@@ -12,6 +12,23 @@ RewriteRule ^shares ./dav.php [L]
 RewriteRule ^api ./rest.php [L]
 RewriteRule ^user ./index.php?get_action=user_access_point [L]
 
+### Redirect all searches to content searches ###
+
+# If 'fields' parameter is not present
+
+RewriteCond %{QUERY_STRING} ^(([^&]*&)*)get_action=search(&.*)*$
+RewriteCond %{QUERY_STRING} !^(([^&]*&)*)fields=[^&]*(&.*)?$
+RewriteRule ^index\.php$ /index.php?%1fields=ajxp_document_content%3&get_action=search [L,R=temp]
+
+# If 'fields' parameter is present but has a different value
+
+RewriteCond %{QUERY_STRING} ^(([^&]*&)*)get_action=search(&.*)*$
+RewriteCond %{QUERY_STRING} !^(([^&]*&)*)fields=ajxp_document_content(&.*)?$
+RewriteCond %{QUERY_STRING} ^(([^&]*&)*)fields=[^&]*(&.*)?$
+RewriteRule ^index\.php$ /index.php?%1fields=ajxp_document_content%3 [L,R=temp]
+
+### End of redirect all searches to content searches ###
+
 #Following lines seem to be necessary if PHP is working
 #with apache as CGI or FCGI. Just remove the #
 #See http://doc.tiki.org/WebDAV#Note_about_Apache_with_PHP_as_fcgi_or_cgi
