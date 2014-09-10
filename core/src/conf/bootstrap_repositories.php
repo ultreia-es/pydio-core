@@ -27,24 +27,26 @@
 defined('AJXP_EXEC') or die( 'Access not allowed');
 
 $REPOSITORIES[0] = array(
-	"DISPLAY"		=>	"Default Files",
-    "DISPLAY_ID"    =>  430,
-    "DESCRIPTION_ID"=>  475,
-	"AJXP_SLUG"		=>  "default",
-	"DRIVER"		=>	"ftp",
-	"DRIVER_OPTIONS"=> array(
-		"FTP_HOST" => "localhost",
-		"FTP_PORT" => 21,
-		"PATH" => "/",
-		"FTP_DIRECT" => true,
-		"USE_SESSION_CREDENTIALS" => true,
-		//"RECYCLE_BIN" => "recycle_bin",
-		"CHMOD_VALUE" => "0600",
-		"DEFAULT_RIGHTS"=>  "rw",
-		"PAGINATION_THRESHOLD" => 500,
-		"PAGINATION_NUMBER" => 200,
-		"TMP_UPLOAD" => "/tmp"
+	"DISPLAY"		=> "My Files",
+	"DISPLAY_ID"		=> 432,
+	"DESCRIPTION_ID"	=> 476,
+	"AJXP_SLUG"		=> "default",
+	"DRIVER"		=> "fs",
+	"DRIVER_OPTIONS"	=> array(
+		"PATH"			=> "/home/usuarios/AJXP_USER",
+		"CREATE"		=> true,
+		//"RECYCLE_BIN"		=> "recycle_bin",
+		"CHMOD_VALUE"		=> "0600",
+		"DEFAULT_RIGHTS"	=> "rw",
+		"PAGINATION_THRESHOLD"	=> 500,
+		"PAGINATION_NUMBER"	=> 200,
+		"META_SOURCES"		=> array(
+			"index.lucene"		=> array(
+				"index_meta_fields"	=> "tags",
+				"index_content"		=> true
+			)
 		)
+	)
 );
 
 // DO NOT REMOVE THIS!
@@ -98,7 +100,8 @@ $REPOSITORIES["fs_template"] = array(
                 "meta_labels" => "Latitude,Longitude"
             ),
             "index.lucene" => array(
-                "index_meta_fields" => "tags"
+                "index_meta_fields" => "tags",
+		"index_content" => true
             )
 		)
 	),
