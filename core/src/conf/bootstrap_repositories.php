@@ -58,7 +58,8 @@ $REPOSITORIES[0] = array(
                 "meta_labels" => "Latitude,Longitude"
             ),
             "index.lucene" => array(
-                "index_meta_fields" => "tags"
+                "index_meta_fields" => "tags",
+                "index_content"     => true
             ),
         )
     ),
@@ -99,6 +100,7 @@ $REPOSITORIES[1] = array(
             "index.lucene" => array(
                 "index_meta_fields" => "tags",
                 "repository_specific_keywords" => "AJXP_USER",
+                "index_content"     => true
             )
         )
     ),
