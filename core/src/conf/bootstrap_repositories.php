@@ -93,6 +93,7 @@ $REPOSITORIES[1] = array(
             "meta.filehasher"   => array(),
             "meta.watch"        => array(),
             "meta.syncable"     => array(),
+            "meta.quota"     => array(),
             "meta.exif"   => array(
                 "meta_fields" => "COMPUTED_GPS.GPS_Latitude,COMPUTED_GPS.GPS_Longitude",
                 "meta_labels" => "Latitude,Longitude"
