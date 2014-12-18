@@ -41,6 +41,22 @@ $REPOSITORIES[0] = array(
 		"PAGINATION_THRESHOLD"	=> 500,
 		"PAGINATION_NUMBER"	=> 200,
 		"META_SOURCES"		=> array(
+			"metastore.serial"	=> array(
+				"METADATA_FILE"			=> ".ajxp_meta",
+				"METADATA_FILE_LOCATION"	=> "infolders"
+			),
+			"meta.user"		=> array(
+				"meta_fields"		=> "tags",
+				"meta_labels"		=> "Tags",
+				"meta_visibility"	=> "hidden"
+            		),
+			"meta.filehasher"	=> array(),
+			"meta.watch"		=> array(),
+			"meta.syncable"		=> array(),
+			"meta.exif"		=> array(
+				"meta_fields"		=> "COMPUTED_GPS.GPS_Latitude,COMPUTED_GPS.GPS_Longitude",
+				"meta_labels"		=> "Latitude,Longitude"
+			),
 			"index.lucene"		=> array(
 				"index_meta_fields"	=> "tags",
 				"index_content"		=> true
@@ -53,6 +69,7 @@ $REPOSITORIES[0] = array(
 // USER DASHBOARD
 $REPOSITORIES["ajxp_user"] = array(
     "DISPLAY"		    =>	"My Dashboard",
+    "AJXP_SLUG"		    =>  "dashboard",
     "DISPLAY_ID"		=>	"user_dash.title",
     "DESCRIPTION_ID"	=>	"user_dash.desc",
     "DRIVER"		    =>	"ajxp_user",
@@ -61,13 +78,25 @@ $REPOSITORIES["ajxp_user"] = array(
     )
 );
 
+$REPOSITORIES["ajxp_home"] = array(
+    "DISPLAY"		    =>	"Welcome",
+    "AJXP_SLUG"		    =>  "welcome",
+    "DISPLAY_ID"		=>	"user_home.title",
+    "DESCRIPTION_ID"	=>	"user_home.desc",
+    "DRIVER"		    =>	"ajxp_home",
+    "DRIVER_OPTIONS"    => array(
+        "DEFAULT_RIGHTS" => "rw"
+    )
+);
+
 // ADMIN REPOSITORY
 $REPOSITORIES["ajxp_conf"] = array(
-	"DISPLAY"		=>	"Settings",
-	"DISPLAY_ID"		=>	"165",
-        "DESCRIPTION_ID"	=>	"506",
-	"DRIVER"		=>	"ajxp_conf",
-	"DRIVER_OPTIONS"=> array()
+	"DISPLAY"		=> "Settings",
+	"AJXP_SLUG"		=> "settings",
+	"DISPLAY_ID"		=> "165",
+	"DESCRIPTION_ID"	=> "506",
+	"DRIVER"		=> "ajxp_conf",
+	"DRIVER_OPTIONS"	=> array()
 );
 
 $REPOSITORIES["fs_template"] = array(
@@ -95,6 +124,7 @@ $REPOSITORIES["fs_template"] = array(
 			),
             "meta.filehasher"   => array(),
             "meta.watch"        => array(),
+            "meta.syncable"     => array(),
             "meta.exif"   => array(
                 "meta_fields" => "COMPUTED_GPS.GPS_Latitude,COMPUTED_GPS.GPS_Longitude",
                 "meta_labels" => "Latitude,Longitude"
