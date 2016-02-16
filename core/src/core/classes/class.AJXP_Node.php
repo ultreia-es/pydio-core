@@ -53,6 +53,10 @@ class AJXP_Node
      */
     protected $nodeInfoLoaded = false;
     /**
+     * @var string Details level passed to nodeLoadInfo()
+     */
+    protected $nodeInfoLevel = "minimal";
+    /**
      * @var Repository
      */
     private $_repository;
@@ -61,9 +65,14 @@ class AJXP_Node
      */
     private $_accessDriver;
     /**
-     * @return MetaStoreProvider
+     * @var MetaStoreProvider
      */
     private $_metaStore;
+
+    /**
+     * @var String
+     */
+    private $_user;
 
     /**
      * @var array
@@ -171,7 +180,6 @@ class AJXP_Node
     }
 
     /**
-     * @abstract
      * @param String $nameSpace
      * @param bool $private
      * @param int $scope
@@ -190,10 +198,11 @@ class AJXP_Node
     }
 
     /**
-     * @abstract
      * @param String $nameSpace
      * @param bool $private
      * @param int $scope
+     * @param bool $indexable
+     * @return array
      */
     public function retrieveMetadata($nameSpace, $private = false, $scope=AJXP_METADATA_SCOPE_REPOSITORY, $indexable = false)
     {
@@ -206,8 +215,112 @@ class AJXP_Node
             }
             return $data;
         }
+        return array();
     }
 
+    /**
+     * @param AJXP_Node $originalNode
+     * @param string $nameSpace
+     * @param string $operation
+     * @param bool $private
+     * @param int $scope
+     * @param bool $indexable
+     * @return array()
+     */
+    public function copyOrMoveMetadataFromNode($originalNode, $nameSpace, $operation="move", $private = false, $scope=AJXP_METADATA_SCOPE_REPOSITORY, $indexable = false){
+
+        if($this->getMetaStore() == false || $this->getMetaStore()->inherentMetaMove()){
+            return array();
+        }
+        $metaData = $originalNode->retrieveMetadata($nameSpace, $private, $scope, $indexable);
+        if(isSet($metaData) && !empty($metaData)){
+            $this->setMetadata($nameSpace, $metaData, $private, $scope, $indexable);
+            if($operation == "move"){
+                $originalNode->removeMetadata($nameSpace, $private, $scope, $indexable);
+            }
+            return $metaData;
+        }
+        return array();
+
+    }
+
+    /**
+     * @return AJXP_Node|null
+     */
+    public function getParent(){
+
+        if(empty($this->urlParts["path"]) || $this->urlParts["path"] == "/"){
+            return null;
+        }
+        $parent = new AJXP_Node(dirname($this->_url));
+        $parent->setDriver($this->_accessDriver);
+        return $parent;
+
+    }
+
+    public function findMetadataInParent($nameSpace, $private = false, $scope=AJXP_METADATA_SCOPE_REPOSITORY, $indexable = false){
+
+        $metadata = false;
+        $parentNode = $this->getParent();
+        if($parentNode != null){
+            $metadata = $parentNode->retrieveMetadata($nameSpace, $private, $scope,$indexable);
+            if($metadata == false){
+                $metadata = $parentNode->findMetadataInParent($nameSpace, $private, $scope, $indexable);
+            }else{
+                $metadata["SOURCE_NODE"] = $parentNode;
+            }
+        }
+        return $metadata;
+
+    }
+
+    /**
+     * @param String $nameSpace
+     * @param bool $private
+     * @param int $scope
+     * @param bool $indexable
+     * @param array $collect
+     */
+    public function collectMetadataInParents($nameSpace, $private = false, $scope=AJXP_METADATA_SCOPE_REPOSITORY, $indexable = false, &$collect=array()){
+
+        $parentNode = $this->getParent();
+        if($parentNode != null){
+            $metadata = $parentNode->retrieveMetadata($nameSpace, $private, $scope,$indexable);
+            if($metadata != false){
+                $metadata["SOURCE_NODE"] = $parentNode;
+                $collect[] = $metadata;
+            }
+            $parentNode->collectMetadataInParents($nameSpace, $private, $scope, $indexable, $collect);
+        }
+
+    }
+
+    /**
+     * @param array $nameSpaces
+     * @param bool $private
+     * @param int $scope
+     * @param bool $indexable
+     * @param array $collect
+     */
+    public function collectMetadatasInParents($nameSpaces, $private = false, $scope=AJXP_METADATA_SCOPE_REPOSITORY, $indexable = false, &$collect=array()){
+
+        $parentNode = $this->getParent();
+        if($parentNode != null){
+            $nodeMeta = array();
+            foreach($nameSpaces as $nameSpace){
+                $metadata = $parentNode->retrieveMetadata($nameSpace, $private, $scope,$indexable);
+                if($metadata != false){
+                    $nodeMeta[$nameSpace] = $metadata;
+                }
+            }
+            if(count($nodeMeta)){
+                $nodeMeta["SOURCE_NODE"] = $parentNode;
+                $collect[] = $nodeMeta;
+            }
+            $parentNode->collectMetadatasInParents($nameSpaces, $private, $scope, $indexable, $collect);
+        }
+
+    }
 
     /**
      * @param bool $boolean Leaf or Collection?
@@ -244,6 +357,21 @@ class AJXP_Node
     }
 
     /**
+     * @return string
+     */
+    public function getExtension(){
+        return strtolower(pathinfo($this->urlParts["path"], PATHINFO_EXTENSION));
+    }
+
+    /**
+     * @param $string
+     * @return bool
+     */
+    public function hasExtension($string){
+        return strcasecmp($string, $this->getExtension()) == 0;
+    }
+
+    /**
      * List all set metadata keys
      * @return array
      */
@@ -262,6 +390,9 @@ class AJXP_Node
      */
     public function loadNodeInfo($forceRefresh = false, $contextNode = false, $details = false)
     {
+        if($this->nodeInfoLoaded && $this->nodeInfoLevel != $details){
+            $forceRefresh = true;
+        }
         if($this->nodeInfoLoaded && !$forceRefresh) return;
         if (!empty($this->_wrapperClassName)) {
             $registered = AJXP_PluginsService::getInstance()->getRegisteredWrappers();
@@ -272,6 +403,7 @@ class AJXP_Node
         }
         AJXP_Controller::applyHook("node.info", array(&$this, $contextNode, $details));
         $this->nodeInfoLoaded = true;
+        $this->nodeInfoLevel = $details;
     }
 
     /**
@@ -282,8 +414,8 @@ class AJXP_Node
     public function getRealFile()
     {
         if (!isset($this->realFilePointer)) {
-            $this->realFilePointer = call_user_func(array($this->_wrapperClassName, "getRealFSReference"), $this->_url, true);
-            $isRemote = call_user_func(array($this->_wrapperClassName, "isRemote"));
+        $this->realFilePointer = AJXP_MetaStreamWrapper::getRealFSReference($this->_url, true);
+            $isRemote = AJXP_MetaStreamWrapper::wrapperIsRemote($this->_url);
             if ($isRemote) {
                 register_shutdown_function(array("AJXP_Utils", "silentUnlink"), $this->realFilePointer);
             }
@@ -318,6 +450,31 @@ class AJXP_Node
     public function getScheme()
     {
         return $this->urlParts["scheme"];
+    }
+
+    /**
+     * @return string A username
+     */
+    public function getUser(){
+        return $this->_user;
+    }
+
+    /**
+     * @param string $userId A username
+     */
+    public function setUser($userId){
+        $this->_user = $userId;
+        $this->urlParts["user"] = $userId;
+        // Update url with a user@workspaceID
+        $crt = $this->getScheme()."://".$this->getRepositoryId();
+        $this->_url = str_replace($crt, $this->getScheme()."://".$this->_user."@".$this->getRepositoryId(), $this->_url);
+    }
+
+    /**
+     * @return string A username passed through url
+     */
+    public function hasUser(){
+        return isSet($this->_user);
     }
 
     /**
@@ -376,7 +533,7 @@ class AJXP_Node
      * Magic setter for metadata
      * @param $metaName
      * @param $metaValue
-     * @return
+     * @return void
      */
     public function __set($metaName, $metaValue)
     {
@@ -407,6 +564,8 @@ class AJXP_Node
         if (strstr($this->urlParts["scheme"], "ajxp.")!==false) {
             $pServ = AJXP_PluginsService::getInstance();
             $this->_wrapperClassName = $pServ->getWrapperClassName($this->urlParts["scheme"]);
+        }else if($this->urlParts["scheme"] == "pydio"){
+            $this->_wrapperClassName = "AJXP_MetaStreamWrapper";
         }
     }
 

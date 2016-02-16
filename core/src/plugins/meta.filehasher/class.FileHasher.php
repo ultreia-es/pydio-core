@@ -26,9 +26,8 @@ defined('AJXP_EXEC') or die('Access not allowed');
  * @package AjaXplorer_Plugins
  * @subpackage Meta
  */
-class FileHasher extends AJXP_Plugin
+class FileHasher extends AJXP_AbstractMetaSource
 {
-    protected $accessDriver;
     const METADATA_HASH_NAMESPACE = "file_hahser";
     /**
     * @var MetaStoreProvider
@@ -39,6 +38,25 @@ class FileHasher extends AJXP_Plugin
     {
         return function_exists("rsync_generate_signature");
     }
+
+    public function getConfigs()
+    {
+        $data = parent::getConfigs();
+        $this->filterData($data);
+        return $data;
+    }
+    public function loadConfigs($data)
+    {
+        $this->filterData($data);
+        parent::loadConfigs($data);
+
+    }
+
+    private function filterData(&$data)
+    {
+        $data["RSYNC_SUPPORTED"] = self::rsyncEnabled();
+    }
+
 
     public function parseSpecificContributions(&$contribNode)
     {
@@ -62,12 +80,12 @@ class FileHasher extends AJXP_Plugin
         }
     }
 
-       public function initMeta($accessDriver)
-       {
-           $this->accessDriver = $accessDriver;
+    public function initMeta($accessDriver)
+    {
+        parent::initMeta($accessDriver);
         $store = AJXP_PluginsService::getInstance()->getUniqueActivePluginForType("metastore");
         if ($store === false) {
-           throw new Exception("The 'meta.simple_lock' plugin requires at least one active 'metastore' plugin");
+            throw new Exception("The 'meta.simple_lock' plugin requires at least one active 'metastore' plugin");
         }
         $this->metaStore = $store;
         $this->metaStore->initMeta($accessDriver);
@@ -75,8 +93,9 @@ class FileHasher extends AJXP_Plugin
 
     private function getTreeName()
     {
-        $base = AJXP_SHARED_CACHE_DIR."/trees/tree-".ConfService::getRepository()->getId();
-        $secuScope = ConfService::getRepository()->securityScope();
+        $repo = $this->accessDriver->repository;
+        $base = AJXP_SHARED_CACHE_DIR."/trees/tree-".$repo->getId();
+        $secuScope = $repo->securityScope();
         if ($secuScope == "USER") {
             $base .= "-".AuthService::getLoggedUser()->getId();
         } else if ($secuScope == "GROUP") {
@@ -114,18 +133,16 @@ class FileHasher extends AJXP_Plugin
     public function switchActions($actionName, $httpVars, $fileVars)
     {
         //$urlBase = $this->accessDriver
-        $repository = ConfService::getRepository();
+        $repository = $this->accessDriver->repository;
         if (!$repository->detectStreamWrapper(true)) {
             return false;
         }
-        $streamData = $repository->streamData;
-        $this->streamData = $streamData;
-        $destStreamURL = $streamData["protocol"]."://".$repository->getId();
+        $selection = new UserSelection($repository, $httpVars);
         switch ($actionName) {
             case "filehasher_signature":
-                $file = AJXP_Utils::decodeSecureMagic($httpVars["file"]);
-                if(!file_exists($destStreamURL.$file)) break;
-                $cacheItem = AJXP_Cache::getItem("signatures", $destStreamURL.$file, array($this, "generateSignature"));
+                $file = $selection->getUniqueNode();
+                if(!file_exists($file->getUrl())) break;
+                $cacheItem = AJXP_Cache::getItem("signatures", $file->getUrl(), array($this, "generateSignature"));
                 $data = $cacheItem->getData();
                 header("Content-Type:application/octet-stream");
                 header("Content-Length", strlen($data));
@@ -141,8 +158,8 @@ class FileHasher extends AJXP_Plugin
                 $uploadedData = tempnam(AJXP_Utils::getAjxpTmpDir(), $actionName."-sig");
                 move_uploaded_file($fileVars["userfile_0"]["tmp_name"], $uploadedData);
 
-                $fileUrl = $destStreamURL.AJXP_Utils::decodeSecureMagic($httpVars["file"]);
-                $file = call_user_func(array($this->streamData["classname"], "getRealFSReference"), $fileUrl, true);
+                $fileUrl = $selection->getUniqueNode()->getUrl();
+                $file = AJXP_MetaStreamWrapper::getRealFSReference($fileUrl, true);
                 if ($actionName == "filehasher_delta") {
                     $signatureFile = $uploadedData;
                     $deltaFile = tempnam(AJXP_Utils::getAjxpTmpDir(), $actionName."-delta");
@@ -160,22 +177,35 @@ class FileHasher extends AJXP_Plugin
                     rsync_patch_file($file, $deltaFile, $patched);
                     rename($patched, $file);
                     unlink($deltaFile);
+                    $node = $selection->getUniqueNode();
+                    AJXP_Controller::applyHook("node.change", array($node, $node, false));
                     header("Content-Type:text/plain");
                     echo md5_file($file);
                 }
             break;
             case "stat_hash" :
-                $selection = new UserSelection();
-                $selection->initFromArray($httpVars);
                 clearstatcache();
                 header("Content-type:application/json");
                 if ($selection->isUnique()) {
-                    $node = $selection->getUniqueNode($this->accessDriver);
+                    $node = $selection->getUniqueNode();
                     $stat = @stat($node->getUrl());
-                    if (!$stat) {
+                    if (!$stat || !is_readable($node->getUrl())) {
                         print '{}';
                     } else {
-                        if($node->isLeaf()) $hash = $this->getFileHash($selection->getUniqueNode($this->accessDriver));
+                        if(is_file($node->getUrl())) {
+                            if(isSet($_SERVER["HTTP_RANGE"])){
+                                $fullSize = floatval($stat['size']);
+                                $ranges = explode('=', $_SERVER["HTTP_RANGE"]);
+                                $offsets = explode('-', $ranges[1]);
+                                $offset = floatval($offsets[0]);
+                                $length = floatval($offsets[1]) - $offset;
+                                if (!$length) $length = $fullSize - $offset;
+                                if ($length + $offset > $fullSize || $length < 0) $length = $fullSize - $offset;
+                                $hash = $this->getPartialHash($node, $offset, $length);
+                            }else{
+                                $hash = $this->getFileHash($selection->getUniqueNode());
+                            }
+                        }
                         else $hash = 'directory';
                         $stat[13] = $stat["hash"] = $hash;
                         print json_encode($stat);
@@ -184,16 +214,16 @@ class FileHasher extends AJXP_Plugin
                     $files = $selection->getFiles();
                     print '{';
                     foreach ($files as $index => $path) {
-                        $node = new AJXP_Node($destStreamURL.$path);
-                        $stat = @stat($destStreamURL.$path);
-                        if(!$stat) $stat = '{}';
+                        $node = new AJXP_Node($selection->currentBaseUrl().$path);
+                        $stat = @stat($selection->currentBaseUrl().$path);
+                        if(!$stat || !is_readable($node->getUrl())) $stat = '{}';
                         else {
                             if(!is_dir($node->getUrl())) $hash = $this->getFileHash($node);
                             else $hash = 'directory';
                             $stat[13] = $stat["hash"] = $hash;
                             $stat = json_encode($stat);
                         }
-                        print json_encode($path).':'.$stat . (($index < count($files) -1) ? "," : "");
+                        print json_encode(SystemTextEncoding::toUTF8($path)).':'.$stat . (($index < count($files) -1) ? "," : "");
                     }
                     print '}';
                 }
@@ -207,6 +237,7 @@ class FileHasher extends AJXP_Plugin
 
     /**
      * @param AJXP_Node $node
+     * @return String md5
      */
     public function getFileHash($node)
     {
@@ -242,7 +273,31 @@ class FileHasher extends AJXP_Plugin
             }
             $node->mergeMetadata(array("md5" => $md5));
             return $md5;
+        }else{
+            return 'directory';
         }
+    }
+
+    /**
+     * @param AJXP_Node $node
+     * @param float $offset
+     * @param float $length
+     * @return String md5
+     */
+    public function getPartialHash($node, $offset, $length){
+
+        $this->logDebug('Getting partial hash from ' . $offset . ' to ' . $length );
+        $fp = fopen($node->getUrl(), "r");
+        $ctx = hash_init('md5');
+        if($offset > 0){
+            fseek($fp, $offset);
+        }
+        hash_update_stream($ctx, $fp, $length);
+        $hash = hash_final($ctx);
+        $this->logDebug('Partial hash is ' . $hash );
+        fclose($fp);
+        return $hash;
+
     }
 
     /**

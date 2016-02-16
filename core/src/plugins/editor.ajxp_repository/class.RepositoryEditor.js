@@ -36,6 +36,7 @@ Class.create("RepositoryEditor", AbstractEditor, {
         // INIT TAB
         var infoPane = this.element.down("#pane-infos");
         var metaPane = this.element.down("#pane-metas");
+        this.sharesPane = this.element.down("#pane-shares");
 
         var oElement = this.element;
         infoPane.setStyle({position:"relative"});
@@ -64,6 +65,16 @@ Class.create("RepositoryEditor", AbstractEditor, {
         return true;
     },
 
+    close: function($super){
+        if(this.sharesList){
+            this.sharesList.destroy();
+        }
+        if(this.sharesToolbar){
+            this.sharesToolbar.destroy();
+        }
+        $super();
+    },
+
     save : function(){
         if(!this.isDirty()) return;
 
@@ -79,10 +90,9 @@ Class.create("RepositoryEditor", AbstractEditor, {
             conn.setParameters(toSubmit);
             conn.setMethod("post");
             conn.onComplete = function(transport){
-                ajaxplorer.actionBar.parseXmlMessage(transport.responseXML);
+                PydioApi.getClient().parseXmlMessage(transport.responseXML);
                 this.loadRepository(this.repositoryId);
-                ajaxplorer.fireNodeRefresh(this.node);
-
+                ajaxplorer.fireContextRefresh();
                 this.setClean();
             }.bind(this);
             conn.sendAsync();
@@ -109,6 +119,49 @@ Class.create("RepositoryEditor", AbstractEditor, {
         this.node = node;
         this.formManager = this.getFormManager();
         this.loadRepository(this.repositoryId);
+
+        if(pydio.getController().getActionByName("share")){
+            var listPaneId = "shares-list-" + this.repositoryId;
+            // Create Actionbar with specific datamodel - should detect dm initialisation
+            var actionPane = this.sharesPane.down("#shares-toolbar");
+            var listPane = this.sharesPane.down("#shares-list");
+            listPane.setAttribute("id", listPaneId);
+
+
+            // Load list of shares
+            listPane.observe("editor:updateTitle", function(e){
+                Event.stop(e);
+            });
+            this.sharesList = new FetchedResultPane(listPane, {
+                nodeProviderProperties:{
+                    get_action:"sharelist-load",
+                    parent_repository_id:this.repositoryId,
+                    user_context:"global"
+                },
+                groupByData:2,
+                updateGlobalContext:false,
+                selectionChangeCallback:false,
+                displayMode: 'list',
+                fixedDisplayMode: 'list',
+                fit:"height"
+            });
+            listPane.removeClassName("class-FetchedResultPane");
+            listPane.addClassName("shares-list");
+            this.sharesList._dataLoaded = true;
+            this.sharesList.reloadDataModel();
+            this.sharesPane.resizeOnShow = function(){
+                this.sharesList.resize();
+            }.bind(this);
+
+            this.sharesToolbar = new ActionsToolbar(actionPane, {
+                toolbarsList:["share_list_toolbar-selection", "share_list_toolbar"],
+                skipBubbling:true,
+                skipCarousel:true,
+                submenuOffsetTop:2,
+                dataModelElementId:listPaneId
+            });
+        }
+
     },
 
     updateTitle: function(label){
@@ -127,7 +180,7 @@ Class.create("RepositoryEditor", AbstractEditor, {
             this.feedRepositoryForm(transport.responseXML, metaTab);
             modal.refreshDialogPosition();
             modal.refreshDialogAppearance();
-            ajaxplorer.blurAll();
+            pydio.UI.blurAll();
         }.bind(this);
         connexion.sendAsync();
     },
@@ -194,7 +247,8 @@ Class.create("RepositoryEditor", AbstractEditor, {
             if(this.currentRepoWriteable){
                 this.feedMetaSourceForm(xmlData, this.metaPane);
             }else{
-                this.metaPane.update(MessageHash['ajxp_repository_editor.15']);
+                this.metaPane.down("div.dialogLegend").update(MessageHash['ajxp_repository_editor.15']);
+                this.metaPane.select("div#metaTabulator").invoke("hide");
             }
         }
 
@@ -205,6 +259,7 @@ Class.create("RepositoryEditor", AbstractEditor, {
         var metaTabBody = this.metaPane.down('.tabpanes');
         metaTabHead.update("");
         metaTabBody.update("");
+        var id, i;
         var data = XPathSelectSingleNode(xmlData, 'admin_data/repository/param[@name="META_SOURCES"]');
         if(data && data.firstChild && data.firstChild.nodeValue){
             var metaSourcesData = data.firstChild.nodeValue.evalJSON();
@@ -212,7 +267,7 @@ Class.create("RepositoryEditor", AbstractEditor, {
                 var metaLabel = XPathSelectSingleNode(xmlData, 'admin_data/metasources/meta[@id="'+plugId+'"]/@label').nodeValue;
                 var metaDefNodes = XPathSelectNodes(xmlData, 'admin_data/metasources/meta[@id="'+plugId+'"]/param');
 
-                var id = this.repositoryId+"-meta-"+plugId.replace(".", "-");
+                id = this.repositoryId+"-meta-"+plugId.replace(".", "-");
                 var title = new Element('li',{tabIndex:0, "data-PaneID":id}).update(metaLabel);
                 var accordionContent = new Element("div", {className:"tabPane", id:id, style:"padding-bottom: 10px;"});
                 var form = new Element("div", {className:'meta_form_container'});
@@ -221,7 +276,7 @@ Class.create("RepositoryEditor", AbstractEditor, {
                 var insertSave = false;
                 if(metaDefNodes.length){
                     var driverParamsHash = $A([]);
-                    for(var i=0;i<metaDefNodes.length;i++){
+                    for(i=0;i<metaDefNodes.length;i++){
                         driverParamsHash.push(this.formManager.parameterNodeToHash(metaDefNodes[i]));
                     }
                     var paramsValues = new Hash(metaSourcesData[plugId]);
@@ -230,16 +285,16 @@ Class.create("RepositoryEditor", AbstractEditor, {
 
                     insertSave = true;
                 }else{
-                    form.update('<div>No parameters</div>');
+                    form.update("<div>"+MessageHash['ajxp_repository_editor.19']+"</div>");
                 }
                 accordionContent.insert(form);
                 var saveButton = null;
                 accordionContent.insert(new Element('div',{className:'tabPaneButtons', style:'clear:both; padding-right: 20px;'}));
                 if(insertSave){
-                    accordionContent.down(".tabPaneButtons").insert("<div tabindex='0' name='meta_source_edit' class='largeButton SF_disabled' style='min-width:70px; margin-top: 20px;margin-right: 0;float: right;'><span class='icon-save'></span> <span class=\"title\">Save</span></div>");
+                    accordionContent.down(".tabPaneButtons").insert("<div tabindex='0' name='meta_source_edit' class='largeButton SF_disabled' style='min-width:70px; margin-top: 20px;margin-right: 0;float: right;'><span class='icon-save'></span> <span class=\"title\">"+MessageHash['53']+"</span></div>");
                     saveButton = accordionContent.down("div[name='meta_source_edit']");
                 }
-                accordionContent.down(".tabPaneButtons").insert("<div  tabindex='0' name='meta_source_delete' class='largeButton' style='min-width:70px; margin-top: 20px;margin-right: 0;float: right;'><span class='icon-trash'></span> <span class=\"title\">Remove</span></div>");
+                accordionContent.down(".tabPaneButtons").insert("<div  tabindex='0' name='meta_source_delete' class='largeButton' style='min-width:70px; margin-top: 20px;margin-right: 0;float: right;'><span class='icon-trash'></span> <span class=\"title\">"+MessageHash['257']+"</span></div>");
                 metaTabHead.insert(title);
                 metaTabBody.insert(accordionContent);
                 if(saveButton){
@@ -269,8 +324,8 @@ Class.create("RepositoryEditor", AbstractEditor, {
             this.metaSelector.insert(new Element("option", {value:"", selected:"true"}));
             var prevType = "";
             var currentGroup;
-            for(var i=0;i<choices.length;i++){
-                var id = choices[i].getAttribute("id");
+            for(i=0;i<choices.length;i++){
+                id = choices[i].getAttribute("id");
                 var type = id.split(".").shift();
                 var label = choices[i].getAttribute("label");
                 if(!currentGroup || type != prevType){
@@ -283,29 +338,37 @@ Class.create("RepositoryEditor", AbstractEditor, {
             addForm.insert(formEl);
             addForm.insert('<div style="clear: both"></div>');
             formEl.insert(this.metaSelector);
-            metaPane.insert({top:addForm});
-            addForm.insert({before: new Element("div", {className:"dialogLegend"}).update(MessageHash["ajxp_repository_editor.7"])});
-            var addFormDetail = new Element("div");
+            new Chosen(this.metaSelector, {placeholder_text_single:MessageHash["ajxp_repository_editor.21"]});
+            metaPane.down("div.dialogLegend").update(MessageHash["ajxp_repository_editor.7"]);
+            metaPane.down("div.dialogLegend").insert({after:addForm});
+            var addFormDetail = new Element("div", {className:'meta_plugin_new_form empty'});
             addForm.insert(addFormDetail);
 
         }
 
         this.metaSelector.observe("change", function(){
             var plugId = this.metaSelector.getValue();
+            if(!addFormDetail) return;
             addFormDetail.update("");
+            addFormDetail.addClassName("empty");
             if(plugId){
+                addFormDetail.removeClassName("empty");
                 var metaDefNodes = XPathSelectNodes(xmlData, 'admin_data/metasources/meta[@id="'+plugId+'"]/param');
                 var driverParamsHash = $A([]);
                 for(var i=0;i<metaDefNodes.length;i++){
                     driverParamsHash.push(this.formManager.parameterNodeToHash(metaDefNodes[i]));
                 }
-                this.formManager.createParametersInputs(addFormDetail, driverParamsHash, true, null, null, true);
-                this.formManager.disableShortcutsOnForm(addFormDetail);
+                if(driverParamsHash.length){
+                    this.formManager.createParametersInputs(addFormDetail, driverParamsHash, true, null, null, true);
+                    this.formManager.disableShortcutsOnForm(addFormDetail);
+                }else{
+                    addFormDetail.insert('<div class="meta_source_new_empty_params">'+MessageHash['ajxp_repository_editor.20']+'</div>')
+                }
 
             }
             modal.refreshDialogAppearance();
             modal.refreshDialogPosition();
-            addFormDetail.insert("<div class='largeButton' style='width:100px;margin-top: 20px;margin-left: 0; float: right;'><span class='icon-plus-sign'></span> <span>"+MessageHash['ajxp_repository_editor.11']+"</span></div>");
+            addFormDetail.insert("<div class='largeButton' id='meta_source_button_add'><span class='icon-plus-sign'></span> <span>"+MessageHash['ajxp_repository_editor.11']+"</span></div><div style='clear:both;'></div>");
             addFormDetail.down(".largeButton")._form = addForm;
             addFormDetail.down(".largeButton").observe("click", this.metaActionClick.bind(this));
             this.resize();
@@ -321,13 +384,13 @@ Class.create("RepositoryEditor", AbstractEditor, {
     metaActionClick : function(event){
         var img = Event.findElement(event, 'div');
         Event.stop(event);
-        var action;
+        var action, form;
         if(img && img._form){
-            var form = img._form;
+            form = img._form;
             action = "meta_source_add";
         }else{
             var button = Event.findElement(event, 'div.largeButton');
-            var form = button.up('div.tabPaneButtons').previous('div.meta_form_container');
+            form = button.up('div.tabPaneButtons').previous('div.meta_form_container');
             if(button.getAttribute("name")){
                 action = button.getAttribute("name");
             }else{
@@ -358,11 +421,18 @@ Class.create("RepositoryEditor", AbstractEditor, {
         var conn = new Connexion();
         conn.setParameters(params);
         conn.onComplete = function(transport){
-            ajaxplorer.actionBar.parseXmlMessage(transport.responseXML);
+            PydioApi.getClient().parseXmlMessage(transport.responseXML);
             this.loadRepository(this.repositoryId, true);
             if(button && action == "meta_source_edit"){
                 button.addClassName("SF_disabled");
                 this.setClean();
+            }
+            if(action == "meta_source_add"){
+                this.metaSelector.setValue("");
+                this.metaSelector.fire("chosen:updated");
+                var addFormD = form.down(".meta_plugin_new_form");
+                addFormD.update("");
+                addFormD.addClassName("empty");
             }
         }.bind(this);
         conn.sendAsync();
@@ -415,7 +485,8 @@ Class.create("RepositoryEditor", AbstractEditor, {
 
     mergeObjectsRecursive : function(source, destination){
         var newObject = {};
-        for (var property in source) {
+        var property;
+        for (property in source) {
             if (source.hasOwnProperty(property)) {
                 if( source[property] === null ) continue;
                 if( destination.hasOwnProperty(property)){
@@ -433,7 +504,7 @@ Class.create("RepositoryEditor", AbstractEditor, {
                 }
             }
         }
-        for (var property in destination){
+        for (property in destination){
             if(destination.hasOwnProperty(property) && !newObject.hasOwnProperty(property) && destination[property]!==null){
                 if(destination[property] instanceof Object) {
                     newObject[property] = this.mergeObjectsRecursive(destination[property], {});
@@ -456,7 +527,7 @@ Class.create("RepositoryEditor", AbstractEditor, {
         sync.sendSync();
         var encoded;
         if(seed != '-1'){
-            encoded = hex_md5(password);
+            encoded = HasherUtils.hex_md5(password);
         }else{
             encoded = password;
         }

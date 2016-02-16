@@ -26,24 +26,20 @@ defined('AJXP_EXEC') or die('Access not allowed');
  * @package AjaXplorer_Plugins
  * @subpackage Meta
  */
-class SimpleLockManager extends AJXP_Plugin
+class SimpleLockManager extends AJXP_AbstractMetaSource
 {
-    /**
-     * @var AbstractAccessDriver
-     */
-    protected $accessDriver;
     const METADATA_LOCK_NAMESPACE = "simple_lock";
     /**
     * @var MetaStoreProvider
     */
     protected $metaStore;
 
-       public function initMeta($accessDriver)
-       {
-           $this->accessDriver = $accessDriver;
+    public function initMeta($accessDriver)
+    {
+        parent::initMeta($accessDriver);
         $store = AJXP_PluginsService::getInstance()->getUniqueActivePluginForType("metastore");
         if ($store === false) {
-           throw new Exception("The 'meta.simple_lock' plugin requires at least one active 'metastore' plugin");
+            throw new Exception("The 'meta.simple_lock' plugin requires at least one active 'metastore' plugin");
         }
         $this->metaStore = $store;
         $this->metaStore->initMeta($accessDriver);
@@ -56,7 +52,6 @@ class SimpleLockManager extends AJXP_Plugin
      */
     public function applyChangeLock($actionName, $httpVars, $fileVars)
     {
-        if(!isSet($this->actions[$actionName])) return;
         if (is_a($this->accessDriver, "demoAccessDriver")) {
             throw new Exception("Write actions are disabled in demo mode!");
         }
@@ -65,19 +60,14 @@ class SimpleLockManager extends AJXP_Plugin
         if (!AuthService::usersEnabled() && $user!=null && !$user->canWrite($repo->getId())) {
             throw new Exception("You have no right on this action.");
         }
-        $selection = new UserSelection();
-        $selection->initFromHttpVars($httpVars);
-        $currentFile = $selection->getUniqueFile();
-        $wrapperData = $this->accessDriver->detectStreamWrapper(false);
-        $urlBase = $wrapperData["protocol"]."://".$this->accessDriver->repository->getId();
+        $selection = new UserSelection($repo, $httpVars);
 
         $unlock = (isSet($httpVars["unlock"])?true:false);
-        $ajxpNode = new AJXP_Node($urlBase.$currentFile);
         if ($unlock) {
-            $this->metaStore->removeMetadata($ajxpNode, self::METADATA_LOCK_NAMESPACE, false, AJXP_METADATA_SCOPE_GLOBAL);
+            $this->metaStore->removeMetadata($selection->getUniqueNode(), self::METADATA_LOCK_NAMESPACE, false, AJXP_METADATA_SCOPE_GLOBAL);
         } else {
             $this->metaStore->setMetadata(
-                $ajxpNode,
+                $selection->getUniqueNode(),
                 SimpleLockManager::METADATA_LOCK_NAMESPACE,
                 array("lock_user" => AuthService::getLoggedUser()->getId()),
                 false,

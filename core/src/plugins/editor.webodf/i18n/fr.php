@@ -20,6 +20,6 @@
  */
 
 $mess = array(
-    "1" => "Visualiseur Open Documents",
-    "2" => "Visualiser les formats Open Documents Format",
+    "2" => "Visionneur Open Documents",
+    "3" => "Visionneur Open Documents",
 );

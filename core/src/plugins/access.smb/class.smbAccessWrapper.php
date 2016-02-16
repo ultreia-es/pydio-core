@@ -39,13 +39,14 @@ class smbAccessWrapper extends fsAccessWrapper
      */
     protected static function initPath($path, $streamType, $storeOpenContext = false, $skipZip = false)
     {
-        $url = parse_url($path);
+        $url = AJXP_Utils::safeParseUrl($path);
         $repoId = $url["host"];
         $repoObject = ConfService::getRepositoryById($repoId);
         if(!isSet($repoObject)) throw new Exception("Cannot find repository with id ".$repoId);
         $path = $url["path"];
         // Fix if the host is defined as //MY_HOST/path/to/folder
-        $host = str_replace("//", "", $repoObject->getOption("HOST"));
+        $hostOption = AuthService::getFilteredRepositoryOption("access.smb", $repoObject, "HOST");
+        $host = str_replace("//", "", $hostOption);
         $credentials = "";
         $safeCreds = AJXP_Safe::tryLoadingCredentialsFromSources($url, $repoObject);
         if ($safeCreds["user"] != "" && $safeCreds["password"] != "") {
@@ -54,10 +55,16 @@ class smbAccessWrapper extends fsAccessWrapper
             $_SESSION["AJXP_SESSION_REMOTE_PASS"] = $pass;
             $credentials = "$login:$pass@";
             $domain = $repoObject->getOption("DOMAIN");
-            if($domain != "") $credentials = $domain."/".$credentials;
+            if($domain != "") {
+                if((strcmp(substr($domain, -1), "/") === 0) || (strcmp(substr($domain, -1), "\\") === 0)){
+                    $credentials = $domain.$credentials;
+                }else{
+                    $credentials = $domain."/".$credentials;
+                }
+            }
         }
         $basePath = $repoObject->getOption("PATH");
-        $fullPath = "smb://".$credentials.$host."/";//.$basePath."/".$path;
+        $fullPath = "smbclient://".$credentials.$host."/";//.$basePath."/".$path;
         if ($basePath!="") {
            $fullPath.=trim($basePath, "/\\" );
            }
@@ -162,6 +169,7 @@ class smbAccessWrapper extends fsAccessWrapper
     public static function copyFileInStream($path, $stream)
     {
         $fp = fopen(self::getRealFSReference($path), "rb");
+        if(!is_resource($fp)) return;
         while (!feof($fp)) {
             $data = fread($fp, 4096);
             fwrite($stream, $data, strlen($data));

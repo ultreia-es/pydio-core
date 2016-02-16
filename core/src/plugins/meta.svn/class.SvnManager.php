@@ -29,13 +29,11 @@ if (SVNLIB_PATH != "") {
  * @package AjaXplorer_Plugins
  * @subpackage Meta
  */
-class SvnManager extends AJXP_Plugin
+class SvnManager extends AJXP_AbstractMetaSource
 {
     private static $svnListDir;
     private static $svnListCache;
     private $commitMessageParams;
-
-    protected $accessDriver;
 
     public function init($options)
     {
@@ -46,20 +44,16 @@ class SvnManager extends AJXP_Plugin
     public function initMeta($accessDriver)
     {
         require_once("svn_lib.inc.php");
-
-        $this->accessDriver = $accessDriver;
+        parent::initMeta($accessDriver);
         parent::init($this->options);
-
     }
 
     protected function initDirAndSelection($httpVars, $additionnalPathes = array(), $testRecycle = false)
     {
-        $userSelection = new UserSelection();
-        $userSelection->initFromHttpVars($httpVars);
-        $repo = ConfService::getRepository();
-        $repo->detectStreamWrapper();
-        $wrapperData = $repo->streamData;
-        $urlBase = $wrapperData["protocol"]."://".$repo->getId();
+        $repo = $this->accessDriver->repository;
+        $repo->detectStreamWrapper(true);
+        $userSelection = new UserSelection($repo, $httpVars);
+        $urlBase = $userSelection->currentBaseUrl();
         $result = array();
 
         if ($testRecycle) {
@@ -73,24 +67,24 @@ class SvnManager extends AJXP_Plugin
                 $sessionKey = "AJXP_SVN_".$repo->getId()."_RECYCLE_CHECKED";
                 if (isSet($_SESSION[$sessionKey])) {
                     $file = RecycleBinManager::getRelativeRecycle()."/".RecycleBinManager::getCacheFileName();
-                    $realFile = call_user_func(array($wrapperData["classname"], "getRealFSReference"), $urlBase.$file);
+                    $realFile = AJXP_MetaStreamWrapper::getRealFSReference($urlBase.$file);
                     $this->addIfNotVersionned($file, $realFile);
                     $_SESSION[$sessionKey] = true;
                 }
             }
         }
 
-        $result["DIR"] = call_user_func(array($wrapperData["classname"], "getRealFSReference"), $urlBase.AJXP_Utils::decodeSecureMagic($httpVars["dir"]));
+        $result["DIR"] = AJXP_MetaStreamWrapper::getRealFSReference($urlBase.AJXP_Utils::decodeSecureMagic($httpVars["dir"]));
         $result["ORIGINAL_SELECTION"] = $userSelection;
         $result["SELECTION"] = array();
         if (!$userSelection->isEmpty()) {
             $files = $userSelection->getFiles();
             foreach ($files as $selected) {
-                $result["SELECTION"][] = call_user_func(array($wrapperData["classname"], "getRealFSReference"), $urlBase.$selected);
+                $result["SELECTION"][] = AJXP_MetaStreamWrapper::getRealFSReference($urlBase.$selected);
             }
         }
         foreach ($additionnalPathes as $parameter => $path) {
-            $result[$parameter] = call_user_func(array($wrapperData["classname"], "getRealFSReference"), $urlBase.$path);
+            $result[$parameter] = AJXP_MetaStreamWrapper::getRealFSReference($urlBase.$path);
         }
         return $result;
     }
@@ -117,17 +111,16 @@ class SvnManager extends AJXP_Plugin
      */
     public function commitFile($file, $ajxpNode = null)
     {
-        $repo = ConfService::getRepository();
+        $repo = $this->accessDriver->repository;
         $repo->detectStreamWrapper();
-        $wrapperData = $repo->streamData;
-        $realFile = call_user_func(array($wrapperData["classname"], "getRealFSReference"), $file);
+        $realFile = AJXP_MetaStreamWrapper::getRealFSReference($file);
 
         $res = ExecSvnCmd("svn status ", $realFile);
         if (count($res[IDX_STDOUT]) && substr($res[IDX_STDOUT][0],0,1) == "?") {
             $res2 = ExecSvnCmd("svn add", "$realFile");
         }
         if ($ajxpNode != null) {
-            $nodeRealFile = call_user_func(array($wrapperData["classname"], "getRealFSReference"), $ajxpNode->getUrl());
+            $nodeRealFile = AJXP_MetaStreamWrapper::getRealFSReference($ajxpNode->getUrl());
             try {
                 ExecSvnCmd("svn propset metachange ".time(), $nodeRealFile);
             } catch (Exception $e) {
@@ -195,12 +188,13 @@ class SvnManager extends AJXP_Plugin
                 header("Cache-Control: private",false);
             }
             $realFile = escapeshellarg($realFile);
+            $revision = escapeshellarg($revision);
             system( (SVNLIB_PATH!=""?SVNLIB_PATH."/":"") ."svn cat -r$revision $realFile");
             exit(0);
         } else if ($actionName == "revert_file") {
 
             $revision = escapeshellarg($httpVars["revision"]);
-               $realFile = $init["SELECTION"][0];
+            $realFile = $init["SELECTION"][0];
             $compare = (isSet($httpVars["compare"]) && $httpVars["compare"] == "true");
             $escapedFile = escapeshellarg($realFile);
             if ($compare) {
@@ -281,8 +275,10 @@ class SvnManager extends AJXP_Plugin
             $this->commitChanges($actionName, array("dir" => $httpVars["dest"]), $filesVars);
         }
         $this->logInfo("CopyMove/Rename (svn delegate)", array("files"=>$init["SELECTION"]));
+
+        $mess = ConfService::getMessages();
         AJXP_XMLWriter::header();
-        AJXP_XMLWriter::sendMessage("The selected files/folders have been copied/moved (by SVN)", null);
+        AJXP_XMLWriter::sendMessage($mess["meta.svn.5"], null);
         AJXP_XMLWriter::reloadDataNode();
         AJXP_XMLWriter::close();
     }
@@ -313,8 +309,10 @@ class SvnManager extends AJXP_Plugin
         $this->commitMessageParams = "[".implode(",",$init["SELECTION"])."]";
         $this->commitChanges($actionName, $httpVars, $filesVars);
         $this->logInfo("Delete (svn delegate)", array("files"=>$init["SELECTION"]));
+
+        $mess = ConfService::getMessages();
         AJXP_XMLWriter::header();
-        AJXP_XMLWriter::sendMessage("The selected files/folders have been deleted (by SVN)", null);
+        AJXP_XMLWriter::sendMessage($mess["meta.svn.51"], null);
         AJXP_XMLWriter::reloadDataNode();
         AJXP_XMLWriter::close();
     }

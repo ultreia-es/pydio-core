@@ -46,6 +46,7 @@
             <xs:attribute name="name" use="required" type="xs:NCName"/>
             <xs:attribute name="skipSecureToken" type="xs:boolean"/>
             <xs:attribute name="contentTypedProvider" type="xs:boolean"/>
+            <xs:attribute name="forbidOverride" type="xs:boolean"/>
         </xs:complexType>
     </xs:element>
     <xs:element name="gui">
@@ -75,6 +76,7 @@
             <xs:attribute name="infoPanel" type="xs:boolean"/>
             <xs:attribute name="recycle" use="required" type="xs:NCName"/>
             <xs:attribute name="selection" use="required" type="xs:boolean"/>
+            <xs:attribute name="allowedMimes"/>
         </xs:complexType>
     </xs:element>
     <xs:element name="selectionContext">
@@ -172,7 +174,7 @@
         <xs:attribute name="name" use="optional" type="xs:NCName"/>
         <xs:attribute name="label" use="required"/>
         <xs:attribute name="description" use="required"/>
-        <xs:attribute name="enabled" use="optional" type="xs:boolean"/>
+        <xs:attribute name="enabled" use="optional" type="xs:string"/>
         <xs:attribute name="mixins" use="optional" type="xs:string"/>
     </xs:complexType>
 
@@ -321,6 +323,7 @@
                     <xs:attribute name="className" type="xs:NCName"/>
                     <xs:attribute name="text" use="required" type="xs:integer"/>
                     <xs:attribute name="title" use="required" type="xs:integer"/>
+                    <xs:attribute name="order" type="xs:integer"/>
                 </xs:extension>
             </xs:complexContent>
         </xs:complexType>
@@ -468,6 +471,8 @@
             </xs:sequence>
             <xs:attribute name="attributes" use="required"/>
             <xs:attribute name="mime" use="required" type="xs:NCName"/>
+            <xs:attribute name="theme" type="xs:NCName"/>
+            <xs:attribute name="primary" type="xs:boolean"/>
         </xs:complexType>
     </xs:element>
     <xs:element name="template">
@@ -476,6 +481,7 @@
             <xs:attribute name="name" use="required" type="xs:NCName"/>
             <xs:attribute name="position" use="required" type="xs:NCName"/>
             <xs:attribute name="theme" type="xs:NCName"/>
+            <xs:attribute name="label" type="xs:all"/>
         </xs:complexType>
     </xs:element>
     <xs:element name="template_part">
@@ -502,9 +508,9 @@
     </xs:element>
     <xs:element name="extension">
         <xs:complexType>
-            <xs:attribute name="icon" use="required"/>
-            <xs:attribute name="messageId" use="required" type="xs:NCName"/>
             <xs:attribute name="mime" use="required" type="xs:NCName"/>
+            <xs:attribute name="messageId" use="required" type="xs:all"/>
+            <xs:attribute name="icon" use="required"/>
         </xs:complexType>
     </xs:element>
     <xs:element name="processing">
@@ -535,7 +541,8 @@
         </xs:complexType>
     </xs:element>
     <xs:element name="dialogOnCancel">
-        <xs:complexType/>
+        <xs:complexType mixed="true">
+        </xs:complexType>
     </xs:element>
     <xs:element name="dialogOnComplete">
         <xs:complexType mixed="true">
@@ -581,6 +588,8 @@
                 <xs:element ref="resources"/>
                 <xs:element minOccurs="0" ref="node_provider"/>
             </xs:sequence>
+            <xs:attribute name="iconClass"/>
+            <xs:attribute name="description_template"/>
             <xs:attribute name="icon"/>
             <xs:attribute name="icon_tpl_id"/>
         </xs:complexType>
@@ -606,6 +615,8 @@
         <xs:complexType>
             <xs:attribute name="autoload" type="xs:boolean"/>
             <xs:attribute name="file" use="required"/>
+            <xs:attribute name="fallbackCondition"/>
+            <xs:attribute name="fallbackFile"/>
         </xs:complexType>
     </xs:element>
     <xs:element name="i18n">
@@ -626,6 +637,9 @@
             <xs:attribute name="autoload" type="xs:boolean"/>
             <xs:attribute name="className" use="required" type="xs:NCName"/>
             <xs:attribute name="file" use="required"/>
+            <xs:attribute name="depends"/>
+            <xs:attribute name="fallbackCondition"/>
+            <xs:attribute name="fallbackFile"/>
         </xs:complexType>
     </xs:element>
     <xs:element name="node_provider">
@@ -694,12 +708,12 @@
     </xs:element>
     <xs:element name="input_param">
         <xs:complexType>
-            <xs:attribute name="choices"/>
-            <xs:attribute name="default"/>
-            <xs:attribute name="description" use="required"/>
-            <xs:attribute name="mandatory" type="xs:boolean"/>
             <xs:attribute name="name" use="required" type="xs:all"/>
             <xs:attribute name="type" use="required" type="xs:all"/>
+            <xs:attribute name="description" use="required"/>
+            <xs:attribute name="choices"/>
+            <xs:attribute name="default"/>
+            <xs:attribute name="mandatory" type="xs:boolean"/>
         </xs:complexType>
     </xs:element>
     <xs:element name="output">
@@ -759,6 +773,7 @@
         <xs:complexType>
             <xs:choice maxOccurs="unbounded">
                 <xs:element ref="activePlugin"/>
+                <xs:element ref="phpExtension"/>
                 <xs:element ref="pluginClass"/>
                 <xs:element name="pluginResources">
                     <xs:complexType>
@@ -771,6 +786,11 @@
     <xs:element name="activePlugin">
         <xs:complexType>
             <xs:attribute name="pluginName" use="required"/>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="phpExtension">
+        <xs:complexType>
+            <xs:attribute name="name" use="required"/>
         </xs:complexType>
     </xs:element>
     <xs:element name="pluginClass">

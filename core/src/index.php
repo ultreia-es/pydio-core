@@ -59,14 +59,28 @@ ConfService::start();
 
 $confStorageDriver = ConfService::getConfStorageImpl();
 require_once($confStorageDriver->getUserClassFileName());
-//new AjxpSessionHandler();
+
+// Custom Session Handler
+if(defined("AJXP_SESSION_HANDLER_PATH") && defined("AJXP_SESSION_HANDLER_CLASSNAME") && file_exists(AJXP_SESSION_HANDLER_PATH)){
+    require_once(AJXP_SESSION_HANDLER_PATH);
+    if(class_exists(AJXP_SESSION_HANDLER_CLASSNAME, false)){
+        $sessionHandlerClass = AJXP_SESSION_HANDLER_CLASSNAME;
+        $sessionHandler = new $sessionHandlerClass();
+        session_set_save_handler($sessionHandler, false);
+    }
+}
+
 if (!isSet($OVERRIDE_SESSION)) {
     session_name("AjaXplorer");
 }
 session_start();
 
-if (isSet($_GET["tmp_repository_id"])) {
-    ConfService::switchRootDir($_GET["tmp_repository_id"], true);
+if (isSet($_GET["tmp_repository_id"]) || isSet($_POST["tmp_repository_id"])) {
+    try{
+        ConfService::switchRootDir(isset($_GET["tmp_repository_id"])?$_GET["tmp_repository_id"]:$_POST["tmp_repository_id"], true);
+    }catch(AJXP_Exception $e){
+        //$requireAuth = true;
+    }
 } else if (isSet($_SESSION["SWITCH_BACK_REPO_ID"])) {
     ConfService::switchRootDir($_SESSION["SWITCH_BACK_REPO_ID"]);
     unset($_SESSION["SWITCH_BACK_REPO_ID"]);
@@ -97,10 +111,11 @@ if (AuthService::usersEnabled()) {
     AuthService::logUser(null, null);
     // Check that current user can access current repository, try to switch otherwise.
     $loggedUser = AuthService::getLoggedUser();
-    if ($loggedUser == null) {
+    if ($loggedUser == null || $loggedUser->getId() == "guest") {
         // Try prelogging user if the session expired but the logging data is in fact still present
         // For example, for basic_http auth.
-        AuthService::preLogUser((isSet($httpVars["remote_session"])?$httpVars["remote_session"]:""));
+        AJXP_PluginsService::getInstance()->initActivePlugins();
+        AuthService::preLogUser($httpVars);
         $loggedUser = AuthService::getLoggedUser();
         if($loggedUser == null) $requireAuth = true;
     }
@@ -138,7 +153,11 @@ $authDriver = ConfService::getAuthDriverImpl();
 // DRIVERS BELOW NEED IDENTIFICATION CHECK
 if (!AuthService::usersEnabled() || ConfService::getCoreConf("ALLOW_GUEST_BROWSING", "auth") || AuthService::getLoggedUser()!=null) {
     $confDriver = ConfService::getConfStorageImpl();
-    $Driver = ConfService::loadRepositoryDriver();
+    try{
+        $Driver = ConfService::loadRepositoryDriver();
+    }catch(Exception $e){
+        //AuthService::disconnect();
+    }
 }
 AJXP_PluginsService::getInstance()->initActivePlugins();
 require_once(AJXP_BIN_FOLDER."/class.AJXP_Controller.php");

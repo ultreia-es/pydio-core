@@ -61,13 +61,13 @@ class serialAuthDriver extends AbstractAuthDriver
         return $users;
     }
 
-    public function listUsers($baseGroup = "/")
+    public function listUsers($baseGroup = "/", $recursive = true)
     {
         $users = AJXP_Utils::loadSerialFile($this->usersSerFile);
         if (AuthService::ignoreUserCase()) {
             $users = array_combine(array_map("strtolower", array_keys($users)), array_values($users));
         }
-        ConfService::getConfStorageImpl()->filterUsersByGroup($users, $baseGroup, false);
+        ConfService::getConfStorageImpl()->filterUsersByGroup($users, $baseGroup, !$recursive);
         ksort($users);
         return $users;
     }
@@ -78,13 +78,13 @@ class serialAuthDriver extends AbstractAuthDriver
     }
 
     // $baseGroup = "/"
-    public function listUsersPaginated($baseGroup, $regexp, $offset = -1 , $limit = -1)
+    public function listUsersPaginated($baseGroup, $regexp, $offset = -1 , $limit = -1, $recursive = true)
     {
         $users = $this->listUsers($baseGroup);
         $result = array();
         $index = 0;
         foreach ($users as $usr => $pass) {
-            if (!empty($regexp) && !preg_match("/$regexp/i", $usr)) {
+            if (!empty($regexp) && !preg_match("/".preg_quote($regexp)."/i", $usr)) {
                 continue;
             }
             if ($offset != -1 && $index < $offset) {
@@ -97,9 +97,9 @@ class serialAuthDriver extends AbstractAuthDriver
         }
         return $result;
     }
-    public function getUsersCount($baseGroup = "/", $regexp = "", $filterProperty = null, $filterValue = null)
+    public function getUsersCount($baseGroup = "/", $regexp = "", $filterProperty = null, $filterValue = null, $recursive = true)
     {
-        return count($this->listUsersPaginated($baseGroup, $regexp));
+        return count($this->listUsersPaginated($baseGroup, $regexp, -1, -1, $recursive));
     }
 
 
@@ -119,7 +119,7 @@ class serialAuthDriver extends AbstractAuthDriver
         if ($seed == "-1") { // Seed = -1 means that password is not encoded.
             return AJXP_Utils::pbkdf2_validate_password($pass, $userStoredPass);//($userStoredPass == md5($pass));
         } else {
-            return (md5($userStoredPass.$seed) == $pass);
+            return (md5($userStoredPass.$seed) === $pass);
         }
     }
 
@@ -138,7 +138,7 @@ class serialAuthDriver extends AbstractAuthDriver
         $users = $this->_listAllUsers();
         if(!is_array($users)) $users = array();
         if(array_key_exists($login, $users)) return "exists";
-        if ($this->getOption("TRANSMIT_CLEAR_PASS") === true) {
+        if ($this->getOptionAsBool("TRANSMIT_CLEAR_PASS")) {
             $users[$login] = AJXP_Utils::pbkdf2_create_hash($passwd);//md5($passwd);
         } else {
             $users[$login] = $passwd;
@@ -150,7 +150,7 @@ class serialAuthDriver extends AbstractAuthDriver
         if(AuthService::ignoreUserCase()) $login = strtolower($login);
         $users = $this->_listAllUsers();
         if(!is_array($users) || !array_key_exists($login, $users)) return ;
-        if ($this->getOption("TRANSMIT_CLEAR_PASS") === true) {
+        if ($this->getOptionAsBool("TRANSMIT_CLEAR_PASS")) {
             $users[$login] = AJXP_Utils::pbkdf2_create_hash($newPass);//md5($newPass);
         } else {
             $users[$login] = $newPass;

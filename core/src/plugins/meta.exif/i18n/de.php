@@ -1,6 +1,7 @@
 <?php
 
 $mess = array(
-"1" => "Exif Ortsangabe",
+"1" => "Aufnahmeort",
 "2" => "Karte",
+"3" => "Metadaten (EXIF)",
 );

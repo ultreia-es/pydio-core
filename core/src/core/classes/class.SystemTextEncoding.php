@@ -78,12 +78,12 @@ class SystemTextEncoding
     public static function getEncoding()
     {
            if (self::$currentCharsetValue == null) {
-               global $_SESSION;
-               if (isset($_SESSION["AJXP_CHARSET"]) && strlen($_SESSION["AJXP_CHARSET"])) {
-               // Check if the session get an assigned charset encoding (it's the case for remote SSH for example)
-                   self::$currentCharsetValue = $_SESSION["AJXP_CHARSET"];
+               $charset = ConfService::getContextCharset();
+               if (!empty($charset)) {
+                   // Check if the session get an assigned charset encoding (it's the case for remote SSH for example)
+                   self::$currentCharsetValue = $charset;
                } else {
-           // Get the current locale (expecting the filesystem is in the same locale, as the standard says)
+                   // Get the current locale (expecting the filesystem is in the same locale, as the standard says)
                    self::$currentCharsetValue = self::parseCharset(setlocale(LC_CTYPE, 0));
                }
            }
@@ -163,4 +163,34 @@ class SystemTextEncoding
         | \xF4[\x80-\x8F][\x80-\xBF]{2}      # plane 16
             )*$%xs', $string);
     }
+    /**
+     * Transform a string from current Storage charset to utf8
+     * @static
+     * @param string $filesystemElement
+     * @param bool $test Test if it's already UTF8 or not, to avoid double-encoding
+     * @return string
+     */
+    public static function fromStorageEncoding($filesystemElement, $test = true)
+    {
+        if ($test && SystemTextEncoding::isUtf8($filesystemElement)) {
+            return $filesystemElement;
+        }
+        $enc = SystemTextEncoding::getEncoding();
+        return SystemTextEncoding::changeCharset($enc, "UTF-8", $filesystemElement);
+    }
+    /**
+     * Decode a string from UTF8 to current Storage Charset
+     * @static
+     * @param string $filesystemElement
+     * @param bool $test Try to detect if it's really utf8 or not
+     * @return string
+     */
+    public static function toStorageEncoding($filesystemElement, $test = false)
+    {
+        if ($test && !SystemTextEncoding::isUtf8($filesystemElement)) {
+            return $filesystemElement;
+        }
+        $enc = SystemTextEncoding::getEncoding();
+        return SystemTextEncoding::changeCharset("UTF-8", $enc, $filesystemElement);
+    }	
 }

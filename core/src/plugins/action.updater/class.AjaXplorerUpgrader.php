@@ -36,6 +36,7 @@ class AjaXplorerUpgrader
     private $debugMode = FALSE;
     private $cleanFile = "UPGRADE/CLEAN-FILES";
     private $additionalScript = "UPGRADE/PHP-SCRIPT";
+    private $stepTriggerPrefix = "UPGRADE/PHP-";
     private $releaseNote = "UPGRADE/NOTE";
     private $htmlInstructions = "UPGRADE/NOTE-HTML";
     private $dbUpgrade = "UPGRADE/DB-UPGRADE";
@@ -86,22 +87,44 @@ class AjaXplorerUpgrader
 
     }
 
-    public static function configureProxy($proxyHost, $proxyUser, $proxyPass)
+    public static function configureProxy($proxyHost, $proxyUser, $proxyPass, $siteUser = "", $sitePass = "")
     {
-        $proxy = array( 'http' => array( 'proxy' => 'tcp://'.$proxyHost, 'request_fulluri' => true ) );
-        if (!empty($proxyUser) && !empty($proxyPass)) {
-            $auth = base64_encode($proxyUser.":".$proxyPass);
-            $proxy['http']['header'] = "Proxy-Authorization: Basic $auth";
+        $contextData = array('http' => array());
+        if(!empty($proxyHost)){
+            $contextData['http']['proxy'] = 'tcp://'.$proxyHost;// $proxy = array( 'http' => array( 'proxy' => 'tcp://'.$proxyHost, 'request_fulluri' => true ) );
+            $contextData['http']['request_fulluri'] = true;
+            $contextData['ssl']['SNI_enabled'] = false;
+            if (!empty($proxyUser) && !empty($proxyPass)) {
+                $auth = base64_encode($proxyUser.":".$proxyPass);
+                $contextData['http']['header'] = "Proxy-Authorization: Basic $auth";
+            }
         }
-        self::$context = stream_context_create($proxy);
+        if(!empty($siteUser) && !empty($sitePass)){
+            $headerString = "Authorization: Basic " . base64_encode("$siteUser:$sitePass");
+            if(isSet($contextData['http']['header'])){
+                $contextData['http']['header'] .= "; ".$headerString;
+            }else{
+                $contextData['http']['header'] = $headerString;
+            }
+        }
+
+        self::$context = stream_context_create($contextData);
+    }
+
+    public static function getContext(){
+        return self::$context;
     }
 
     public static function getUpgradePath($url, $format = "php", $channel="stable")
     {
+        $packageName = "pydio-core";
+        if(defined('AJXP_PACKAGE_NAME')){
+            $packageName = AJXP_PACKAGE_NAME;
+        }
         if (isSet(self::$context)) {
-            $json = file_get_contents($url."?channel=".$channel."&version=".AJXP_VERSION."&package=pydio-core", null, self::$context);
+            $json = file_get_contents($url."?channel=".$channel."&version=".AJXP_VERSION."&package=".$packageName, null, self::$context);
         } else {
-            $json = AJXP_Utils::getRemoteContent($url."?channel=".$channel."&version=".AJXP_VERSION."&package=pydio-core");
+            $json = AJXP_Utils::getRemoteContent($url."?channel=".$channel."&version=".AJXP_VERSION."&package=".$packageName);
         }
         if($format == "php") return json_decode($json, true);
         else return $json;
@@ -120,16 +143,24 @@ class AjaXplorerUpgrader
     public function execute()
     {
         $stepKeys = array_keys($this->steps);
+        $stepName = $stepKeys[$this->step];
         try {
+            $this->executeStepTrigger($stepName, "pre");
             if (method_exists($this, $stepKeys[$this->step])) {
                 $this->result = call_user_func(array($this, $stepKeys[$this->step]));
             } else {
                 $this->result = "Skipping step, method not found";
             }
+            $this->executeStepTrigger($stepName, "post");
         } catch (Exception $e) {
             $this->error = $e->getMessage();
         }
         $this->step ++;
+    }
+
+    public function testUpgradeScripts(){
+        echo '<br>'.$this->upgradeDB();
+        echo '<br>'.$this->specificTask();
     }
 
     public function checkDownloadFolder()
@@ -144,8 +175,12 @@ class AjaXplorerUpgrader
     public function checkTargetFolder()
     {
         if (!is_writable(AJXP_INSTALL_PATH)) {
-            throw new Exception("The root install path is not writeable, no file will be copied!
-            The archive is available on your server, you can copy its manually to override the current installation.");
+            throw new Exception("The root install path is not writeable, no file will be overriden!
+            <br>When performing upgrades, first change the ownership (using chown) of the Pydio root folder
+            to your web server account (e.g. www-data or apache) and propagate that ownership change to all
+            Pydio sub-folders. <br>Run the upgrade again then, post upgrade, change the ownership back
+            to the previous settings for all Pydio folders, <b>except for the data/ folder</b> that must stay
+            writeable by the web server.");
         }
         return "OK";
     }
@@ -156,7 +191,11 @@ class AjaXplorerUpgrader
         if ($this->debugMode && is_file($this->archive)) {
             return "Already downloaded";
         }
-        $content = AJXP_Utils::getRemoteContent($this->archiveURL);
+        if(self::$context){
+            $content = file_get_contents($this->archiveURL, null, self::$context);
+        }else{
+            $content = AJXP_Utils::getRemoteContent($this->archiveURL);
+        }
         if ($content === false || strlen($content) == 0) {
             throw new Exception("Error while downloading");
         }
@@ -302,7 +341,7 @@ class AjaXplorerUpgrader
                     $ext = (is_file($this->workingFolder."/".$this->dbUpgrade.".mysql")) ? ".mysql" : ".sql";
                     break;
                 default:
-                    return "ERROR!, DB driver "+ $conf["driver"] +" not supported yet in __FUNCTION__";
+                    return "ERROR!, DB driver ". $conf["driver"] ." not supported yet in __FUNCTION__";
             }
 
             $file = $this->dbUpgrade.$ext;
@@ -313,8 +352,7 @@ class AjaXplorerUpgrader
             $results = array();
             $errors = array();
 
-            require_once(AJXP_BIN_FOLDER."/dibi.compact.php");
-            dibi::connect($test);
+            dibi::connect($conf);
             dibi::begin();
             foreach ($parts as $sqlPart) {
                 if(empty($sqlPart)) continue;
@@ -346,8 +384,21 @@ class AjaXplorerUpgrader
 
     }
 
+    protected function executeStepTrigger($stepName, $trigger = "pre")
+    {
+        $scriptName = $this->workingFolder."/".$this->stepTriggerPrefix."-".$trigger."-".$stepName.".php";
+        if(!is_file($scriptName)) return "";
+        ob_start();
+        include($scriptName);
+        $output = ob_get_flush();
+        return "Executed specific task for ".$trigger."-".$stepName.": ".$output;
+    }
+
     public function updateVersion()
     {
+        if(is_file($this->workingFolder."/conf/VERSION.php")){
+            copy($this->workingFolder."/conf/VERSION.php", $this->installPath."/conf/VERSION.php");
+        }
         // Finally copy VERSION file
         if (!is_file($this->workingFolder."/conf/VERSION")) {
             return "<b>No VERSION file in archive</b>";
@@ -360,15 +411,7 @@ class AjaXplorerUpgrader
 
     public function clearCache()
     {
-        @unlink(AJXP_PLUGINS_CACHE_FILE);
-        @unlink(AJXP_PLUGINS_REQUIRES_FILE);
-        @unlink(AJXP_PLUGINS_MESSAGES_FILE);
-        $i18nFiles = glob(dirname(AJXP_PLUGINS_MESSAGES_FILE)."/i18n/*.ser");
-        if (is_array($i18nFiles)) {
-            foreach ($i18nFiles as $file) {
-                @unlink($file);
-            }
-        }
+        ConfService::clearAllCaches();
         return "Ok";
     }
 
@@ -377,6 +420,7 @@ class AjaXplorerUpgrader
         if (is_file($this->workingFolder."/".$this->releaseNote)) {
             return nl2br(file_get_contents($this->workingFolder."/".$this->releaseNote));
         }
+        return "";
     }
 
     public function displayUpgradeInstructions()
@@ -386,321 +430,6 @@ class AjaXplorerUpgrader
             <h1>Upgrade report</h1>
             </div>";
         }
-    }
-
-
-    public static function upgradeFrom324($oldLocation, $dryRun = true)
-    {
-        $mess = ConfService::getMessages();
-        $logFile = AJXP_CACHE_DIR."/import_from_324.log";
-        if ($dryRun) {
-            print("<b>".$mess["updater.10"]."</b><br><br>");
-        }
-
-        $itemsToCopy = array(
-            array(
-                "mask"      => "public/*.php",
-                "target"    => "data/public"
-            ),
-            array(
-                "mask"      => "public/.ajxp_publiclet_counters.ser",
-                "target"    => "data/public"
-            ),
-            array(
-                "mask"      => "server/logs/*.txt",
-                "target"    => "data/logs"
-            ),
-            array(
-                "mask"      => "server/conf/repo.ser",
-                "target"    => "data/plugins/conf.serial"
-            ),
-            array(
-                "mask"      => "server/conf/aliases.ser",
-                "target"    => "data/plugins/conf.serial"
-            ),
-            array(
-                "mask"      => "server/users/*",
-                "target"    => "data/plugins/auth.serial"
-            )
-        );
-
-        $configToPluginsConf = array(
-            array(
-                "type"      => "constant",
-                "name"      => "ENABLE_USERS",
-                "target"    => "core.auth/ENABLE_USERS"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "ALLOW_GUEST_BROWSING",
-                "target"    => "core.auth/ALLOW_GUEST_BROWSING"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "AJXP_PASSWORD_MINLENGTH",
-                "target"    => "core.auth/PASSWORD_MINLENGTH"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "AJXP_SESSION_SET_CREDENTIALS",
-                "target"    => "core.auth/SESSION_SET_CREDENTIALS"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "PUBLIC_DOWNLOAD_FOLDER",
-                "target"    => "core.ajaxplorer/PUBLIC_DOWNLOAD_FOLDER"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "PUBLIC_DOWNLOAD_URL",
-                "target"    => "core.ajaxplorer/PUBLIC_DOWNLOAD_URL"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "default_language",
-                "target"    => "core.ajaxplorer/DEFAULT_LANGUAGE"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "GZIP_DOWNLOAD",
-                "target"    => "core.ajaxplorer/GZIP_COMPRESSION"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "GZIP_LIMIT",
-                "target"    => "core.ajaxplorer/GZIP_LIMIT"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "DISABLE_ZIP_CREATION",
-                "target"    => "core.ajaxplorer/ZIP_CREATION",
-                "modifier"  => "NOT"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "AJXP_WEBDAV_ENABLE",
-                "target"    => "core.ajaxplorer/WEBDAV_ENABLE"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "AJXP_WEBDAV_BASEURI",
-                "target"    => "core.ajaxplorer/WEBDAV_BASEURI"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "AJXP_WEBDAV_BASEHOST",
-                "target"    => "core.ajaxplorer/WEBDAV_BASEHOST"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "AJXP_WEBDAV_DIGESTREALM",
-                "target"    => "core.ajaxplorer/WEBDAV_DIGESTREALM"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "webmaster_email",
-                "target"    => "core.ajaxplorer/WEBMASTER_EMAIL"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "max_caracteres",
-                "target"    => "core.ajaxplorer/NODENAME_MAX_LENGTH"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "customTitle",
-                "target"    => "core.ajaxplorer/APPLICATION_TITLE"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "HTTPS_POLICY_FILE",
-                "target"    => "uploader.flex/HTTPS_POLICY_FILE"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "upload_max_number",
-                "target"    => "core.uploader/UPLOAD_MAX_NUMBER"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "upload_max_size_per_file",
-                "target"    => "core.uploader/UPLOAD_MAX_SIZE"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "upload_max_size_total",
-                "target"    => "core.uploader/UPLOAD_MAX_SIZE_TOTAL"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "AJXP_CLIENT_TIMEOUT_TIME",
-                "target"    => "gui.ajax/CLIENT_TIMEOUT_TIME"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "AJXP_CLIENT_TIMEOUT_WARN_BEFORE",
-                "target"    => "gui.ajax/CLIENT_TIMEOUT_WARN"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "GOOGLE_ANALYTICS_ID",
-                "target"    => "gui.ajax/GOOGLE_ANALYTICS_ID"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "GOOGLE_ANALYTICS_DOMAIN",
-                "target"    => "gui.ajax/GOOGLE_ANALYTICS_DOMAIN"
-            ),
-            array(
-                "type"      => "constant",
-                "name"      => "GOOGLE_ANALYTICS_EVENT",
-                "target"    => "gui.ajax/GOOGLE_ANALYTICS_EVENT"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "customTitleFontSize",
-                "target"    => "gui.ajax/CUSTOM_FONT_SIZE"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "customIcon",
-                "target"    => "gui.ajax/CUSTOM_ICON"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "customIconWidth",
-                "target"    => "gui.ajax/CUSTOM_ICON_WIDTH"
-            ),
-            array(
-                "type"      => "variable",
-                "name"      => "welcomeCustomMessage",
-                "target"    => "gui.ajax/CUSTOM_WELCOME_MESSAGE"
-            ),
-        );
-
-        if (!$dryRun) {
-            $logFileHandle = fopen($logFile, "w");
-        }
-
-        foreach ($itemsToCopy as $item) {
-            $files = glob($oldLocation."/".$item["mask"]);
-            if($files === false) continue;
-            foreach ($files as $fileOrFolder) {
-                $target = AJXP_INSTALL_PATH."/".$item["target"];
-                if (is_file($fileOrFolder)) {
-                    $l = "Copy $fileOrFolder to ".$target."/".basename($fileOrFolder)."\n";
-                    if ($dryRun) {
-                        print(nl2br($l));
-                    } else {
-                        copy($fileOrFolder, $target."/".basename($fileOrFolder));
-                        fwrite($logFileHandle, $l);
-                    }
-
-                } else {
-                    $l= "Copy recursively ".$fileOrFolder." to ".$target."/".basename($fileOrFolder)."\n";
-                    if ($dryRun) {
-                        print(nl2br($l));
-                    } else {
-                        self::copy_r($fileOrFolder, $target."/".basename($fileOrFolder));
-                        fwrite($logFileHandle, $l);
-                    }
-                }
-            }
-        }
-
-        // FILTER THE CONF FILE TO REMOVE ALL CONSTANTS
-        $originalConfdir = $oldLocation."/server/conf";
-        $lines = file($originalConfdir."/conf.php");
-        $filteredLines = array();
-        $mutedConstants = array();
-        foreach ($lines as $line) {
-            if (preg_match('/define\("(.*)", (.*)\);/', $line, $matches)) {
-                //var_dump($matches);
-                $value = trim($matches[2]);
-                if (!empty($value)) {
-                    if ($value[0] == "\"") {
-                        $strValue = substr($value, 1, strlen($value)-2);
-                        if (!empty($strValue)) {
-                            $mutedConstants[$matches[1]] = $strValue;
-                        }
-                    } else if ($value == "true") {
-                        $mutedConstants[$matches[1]] = true;
-                    } else if ($value == "false") {
-                        $mutedConstants[$matches[1]] = false;
-                    } else if (is_numeric($value)) {
-                        $mutedConstants[$matches[1]] = intval($value);
-                    } else {
-                        eval("\$res = $value;");
-                        $mutedConstants[$matches[1]] = $res;
-                    }
-                }
-                $filteredLines[] = "//".$line;
-            } else {
-                $filteredLines[] = $line;
-            }
-        }
-        if (!$dryRun) {
-            fwrite($logFileHandle, "Writing alternate version of conf.php without constants.");
-        }
-        file_put_contents($originalConfdir."/muted_conf.php", implode("", $filteredLines));
-
-        // NOW IMPORT THE MODIFIED CONF FILE AND GATHER ALL DATA
-        include $originalConfdir."/muted_conf.php";
-        $allOptions = array();
-        foreach ($configToPluginsConf as $localConfig) {
-            $localConfigName = $localConfig["name"];
-            if ($localConfig["type"] == "constant" && isset($mutedConstants[$localConfigName])) {
-                $localConfig["value"] = $mutedConstants[$localConfigName];
-            } else if ($localConfig["type"] == "variable" && isSet( $$localConfigName )) {
-                $localConfig["value"] = $$localConfigName;
-            }
-            if(!isSet($localConfig["value"]) || empty($localConfig["value"])) continue;
-            $l = "Should set ".$localConfig["target"]." to value ".$localConfig["value"]."\n";
-            if ($dryRun) {
-                $value = AJXP_Utils::xmlEntities($localConfig["value"]);
-                list($pluginId, $pluginOptionName) = explode("/", $localConfig["target"]);
-                $plug = AJXP_PluginsService::getInstance()->getPluginById($pluginId);
-                $options = $plug->getConfigs();
-                $options[$pluginOptionName] = $value;
-                print(nl2br($l));
-            } else {
-                list($pluginId, $pluginOptionName) = explode("/", $localConfig["target"]);
-                $confStorage = ConfService::getConfStorageImpl();
-                $value = AJXP_Utils::xmlEntities($localConfig["value"]);
-                if (!isSet($allOptions[$pluginId])) {
-                    $plug = AJXP_PluginsService::getInstance()->getPluginById($pluginId);
-                    $allOptions[$pluginId] = $plug->getConfigs();
-                } else {
-                    $allOptions[$pluginId][$pluginOptionName] = $value;
-                }
-                fwrite($logFileHandle, $l);
-            }
-        }
-        if (!$dryRun && count($allOptions)) {
-            foreach ($allOptions as $pId => $pOptions) {
-                $confStorage->savePluginConfig($pId, $pOptions);
-            }
-            @unlink(AJXP_PLUGINS_CACHE_FILE);
-            @unlink(AJXP_PLUGINS_REQUIRES_FILE);
-            @unlink(AJXP_PLUGINS_MESSAGES_FILE);
-        }
-
-        foreach ($REPOSITORIES as $localRepoKey => $localRepoDef) {
-            $localRepoString = '$REPOSITORIES['.(is_numeric($localRepoKey)?$localRepoKey:'"'.$localRepoKey.'"').'] = '.str_replace(array("'", "\\\\"), array("\"","\\"), var_export($localRepoDef, true)).';';
-            $l = "Will print this to bootstrap_repositories : \n". $localRepoString;
-            if ($dryRun) {
-                print(nl2br($l));
-            } else {
-                file_put_contents($originalConfdir."/bootstrap_repositories.php", $localRepoString);
-                fwrite($logFileHandle, $l);
-            }
-        }
-
-        if (!$dryRun) {
-            fclose($logFileHandle);
-            print("<b>The operation is finished, all actions are logged in $logFile. Nothing was touch on your previous installation, please note that the repositories are not moved.<br>You should now logout, clear your browser cache, and refresh this page. Then you will log in with your previous users ids.</b>");
-        }
-
     }
 
     public static function migrateMetaSerialPlugin($repositoryId, $dryRun)

@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ajxpdriver name="ajxp_shared" label="CONF_MESSAGE[Shared Elements (deprecated)]" description="CONF_MESSAGE[Browse user shared elements. Replaced by User Dashboard]"  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="file:../core.ajaxplorer/ajxp_registry.xsd">
+<ajxpdriver name="ajxp_shared" label="CONF_MESSAGE[Shared Elements (deprecated)]" enabled="false" description="CONF_MESSAGE[Browse user shared elements. Replaced by User Dashboard]"  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="file:../core.ajaxplorer/ajxp_registry.xsd">
+    <plugin_info>
+        <core_relation packaged="false" tested_version="follow_core"/>
+        <plugin_author>Charles du Jeu</plugin_author>
+    </plugin_info>
 	<client_settings icon="plugins/access.ajxp_shared/share.png">
 		<resources>
 			<i18n namespace="ajxp_shared" path="plugins/access.ajxp_shared/i18n" />
@@ -100,7 +104,7 @@
 						var conn = new Connexion(baseUrl);
 						conn.addParameter("get_action", "reset_download_counter");
 						conn.onComplete = function(transport){
-							ajaxplorer.actionBar.parseXmlMessage(transport.responseXML);
+							PydioApi.getClient().parseXmlMessage(transport.responseXML);
 						};
 						conn.sendAsync();
 						]]></clientCallback>
@@ -120,7 +124,7 @@
 						var conn = new Connexion();
 						conn.addParameter("get_action", "clear_expired");
 						conn.onComplete = function(transport){
-							ajaxplorer.actionBar.parseXmlMessage(transport.responseXML);
+							PydioApi.getClient().parseXmlMessage(transport.responseXML);
 						};
 						conn.sendAsync();
 					]]></clientCallback>
@@ -146,7 +150,7 @@
 						modal.showDialogForm('Delete', 'delete_shared_form', onLoad, function(){
 							var oForm = modal.getForm();
 							ajaxplorer.getUserSelection().updateFormOrUrl(oForm);
-							ajaxplorer.actionBar.submitForm(oForm);
+							PydioApi.getClient().submitForm(oForm);
 							hideLightBox(true);
 							return false;
 						});

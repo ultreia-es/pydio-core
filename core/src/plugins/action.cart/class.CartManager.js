@@ -21,7 +21,7 @@
 Class.create("CartManager", FetchedResultPane, {
 
     __maxChildren: 100,
-    __label:MessageHash["action.cart.9"],
+    __label:null,
 
     initialize: function($super, element, options){
 
@@ -32,6 +32,7 @@ Class.create("CartManager", FetchedResultPane, {
         $super(element, options);
 
         if(options.label) this.__label = options.label;
+        else this.__label = MessageHash["action.cart.9"];
         element.ajxpNode = this._rootNode;
         element.applyDragMove = this.applyDragMove.bind(this);
         AjxpDroppables.add(element, this._rootNode);
@@ -48,7 +49,7 @@ Class.create("CartManager", FetchedResultPane, {
     },
 
     updateTitle: function(){
-        if(this.htmlElement) this.htmlElement.fire("widget:updateTitle", this.__label+' ('+this._rootNode.getChildren().size()+')');
+        if(this.htmlElement) this.htmlElement.fire("widget:updateTitle", this.__label+' ('+this._rootNode.getChildren().size+')');
     },
 
     triggerEvent: function(){
@@ -57,6 +58,10 @@ Class.create("CartManager", FetchedResultPane, {
         this.stateChangeBuffer = window.setTimeout(function(){
             oEl.fire("widget:updateState");
         }, 1500);
+        this.reload();
+        if(this.options.fit && this.options.fit=="content"){
+            this.htmlElement.up('[ajxpClass="AjxpPane"]').ajxpPaneObject.resize();
+        }
     },
 
     clearContent: function(){
@@ -77,7 +82,6 @@ Class.create("CartManager", FetchedResultPane, {
         var form = $('download_form');
         form.action = window.ajxpServerAccessPath;
         form.secure_token.value = Connexion.SECURE_TOKEN;
-        var gAction;
         form.select("input").each(function(input){
             if(input.name!='get_action' && input.name!='secure_token') input.remove();
             if(input.name == 'get_action') input.value = 'search-cart-download';
@@ -125,7 +129,7 @@ Class.create("CartManager", FetchedResultPane, {
 
         var h = this.getLocalSelectionForPosting();
         if(h.size() == 0) return;
-        if((zipEnabled && multipleFilesDownloadEnabled))
+        if((window.multipleFilesDownloadEnabled))
         {
 
             var zipName = window.prompt(MessageHash['action.cart.14'], this.__label);
@@ -143,11 +147,11 @@ Class.create("CartManager", FetchedResultPane, {
             conn.setMethod("POST");
             conn.setParameters(h);
             conn.onComplete = function(transport){
-                var success = ajaxplorer.actionBar.parseXmlMessage(transport.responseXML);
+                var success = PydioApi.getClient().parseXmlMessage(transport.responseXML);
                 if(success){
                     ajaxplorer.goTo('/'+zipName+'.zip');
                     window.setTimeout(function(){
-                        ajaxplorer.actionBar.fireAction('share');
+                        pydio.getController().fireAction('share-file-minisite');
                     }, 500);
                 }
             }.bind(this);
@@ -174,7 +178,7 @@ Class.create("CartManager", FetchedResultPane, {
 
         var sel = new $H();
         var i = 0;
-        this._rootNode.getChildren().each(function(n){
+        this._rootNode.getChildren().forEach(function(n){
             var key = "file_" + i;
             sel.set(key, n.getPath());
             i++;
@@ -190,11 +194,11 @@ Class.create("CartManager", FetchedResultPane, {
     /**
      * Can be overriden by the children.
      * @param ajxpOptions
-     * @returns {AjxpDataModel}
+     * @returns AjxpDataModel
      */
     initDataModel: function(ajxpOptions){
 
-        var dataModel = new AjxpDataModel(true);
+        var dataModel = new PydioDataModel(true);
         var rNodeProvider = new LocalCartNodeProvider();
         dataModel.setAjxpNodeProvider(rNodeProvider);
         rNodeProvider.initProvider(ajxpOptions.nodeProviderProperties);
@@ -208,8 +212,9 @@ Class.create("CartManager", FetchedResultPane, {
 
         if(this._rootNode.findChildByPath(n.getPath())) return;
         var newNode = new AjxpNode(n.getPath(), n.isLeaf(), n.getLabel(), n.getIcon());
-        newNode.setMetadata($H(Object.clone(n.getMetadata().toObject())));
+        newNode.setMetadata(ProtoCompat.hash2map(ProtoCompat.map2hash(n.getMetadata())));
         this._rootNode.addChild(newNode);
+        this.reload();
 
     },
 
@@ -222,7 +227,7 @@ Class.create("CartManager", FetchedResultPane, {
 
     recurseLeafs: function(node){
 
-        if(this._rootNode.getChildren().length > this.__maxChildren) {
+        if(this._rootNode.getChildren().size > this.__maxChildren) {
             this.updateTitle();
             this.triggerEvent();
             ajaxplorer.displayMessage('ERROR', 'Stopping recursion: please do not select more than ' + this.__maxChildren + ' at once!');
@@ -230,7 +235,7 @@ Class.create("CartManager", FetchedResultPane, {
         }
 
         if(node.isLoaded()){
-            node.getChildren().each(function(n){
+            node.getChildren().forEach(function(n){
                 if(n.isLeaf()){
                     this.localNodeFromRemoteNode(n);
                 }else{
@@ -251,7 +256,7 @@ Class.create("CartManager", FetchedResultPane, {
 
     getStateData: function(){
         var pathes = $A();
-        this._rootNode.getChildren().each(function(el){
+        this._rootNode.getChildren().forEach(function(el){
             pathes.push([el.getPath(), el.getLabel(), el.getIcon()]);
         });
         return pathes;
@@ -276,3 +281,9 @@ Class.create("CartManager", FetchedResultPane, {
     }
 
 });
+
+if(window.ajxpMinisite){
+    document.observe("ajaxplorer:actions_loaded", function(){
+        pydio.getController().actions.delete("send-selection-to-cart");
+    });
+}

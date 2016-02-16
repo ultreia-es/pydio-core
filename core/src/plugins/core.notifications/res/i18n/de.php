@@ -1,6 +1,6 @@
 <?php
 /*
-* Copyright 2007-2012 Charles du Jeu <contact (at) cdujeu.me>
+* Copyright 2007-2014 Charles du Jeu <contact (at) cdujeu.me>
 * This file is part of Pydio.
 *
 * Pydio is free software: you can redistribute it and/or modify
@@ -18,12 +18,25 @@
 *
 * The latest code can be found at <http://pyd.io/>.
 */
+
+/*******************************************************************************
+* German translation:
+*  	+ update: Florian Vogt <flori@vorlif.org>
+*  	+ update: Martin Schaible <martin@martinschaible.ch>
+*******************************************************************************/  
+
 $mess=array(
 "1" => "Benachrichtigungen",
-"2" => "Benachrichtigungs Feed",
+"2" => "Ereignisspeicher",
 "3" => "Wichtige Nachrichten",
 "4" => "Benachrichtigungen",
-"5" => "Aktuelle Geschehen",
-"6" => "Go to ...",
-"7" => "Dismiss",
+"5" => "Aktuelle Ereignisse",
+"6" => "Gehe zu ...",
+"7" => "Verwerfen",
+"8" => "Keine Benachrichtigungen",
+"9" => "Aktivit&auml;ten Arbeitsumgebungen",
+"10" => "Ordner-Aktivit&auml;ten",
+"11" => "Datei-Aktivit&auml;ten",
+    "12" => "Depending on your browser, this will ask for a specific permission. To disable, go through your browser preferences and exceptions. If you have already enabled this feature, probably nothing will happen.",
+    "13" => "Your browser does not seem to support Desktop Notifications yet."
 );

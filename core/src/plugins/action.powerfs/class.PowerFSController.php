@@ -36,16 +36,15 @@ class PowerFSController extends AJXP_Plugin
 
     public function switchAction($action, $httpVars, $fileVars)
     {
-        if(!isSet($this->actions[$action])) return;
         $selection = new UserSelection();
         $dir = $httpVars["dir"] OR "";
-        $dir = AJXP_Utils::securePath($dir);
+        $dir = AJXP_Utils::decodeSecureMagic($dir);
         if($dir == "/") $dir = "";
         $selection->initFromHttpVars($httpVars);
         if (!$selection->isEmpty()) {
             //$this->filterUserSelectionToHidden($selection->getFiles());
         }
-        $urlBase = "ajxp.fs://". ConfService::getRepository()->getId();
+        $urlBase = "pydio://". ConfService::getRepository()->getId();
         $mess = ConfService::getMessages();
         switch ($action) {
 
@@ -71,18 +70,10 @@ class PowerFSController extends AJXP_Plugin
                     if ($httpVars["on_end"] == "reload") {
                         AJXP_XMLWriter::triggerBgAction("reload_node", array(), "powerfs.2", true, 2);
                     } else {
-                        $archiveName =  $httpVars["archive_name"];
+                        $archiveName = AJXP_Utils::sanitize($httpVars["archive_name"], AJXP_SANITIZE_FILENAME);
+                        $archiveName = str_replace("'", "\'", $archiveName);
                         $jsCode = "
-                            $('download_form').action = window.ajxpServerAccessPath;
-                            $('download_form').secure_token.value = window.Connexion.SECURE_TOKEN;
-                            $('download_form').select('input').each(function(input){
-                                if(input.name!='secure_token') input.remove();
-                            });
-                            $('download_form').insert(new Element('input', {type:'hidden', name:'ope_id', value:'".$httpVars["ope_id"]."'}));
-                            $('download_form').insert(new Element('input', {type:'hidden', name:'archive_name', value:'".$archiveName."'}));
-                            $('download_form').insert(new Element('input', {type:'hidden', name:'get_action', value:'postcompress_download'}));
-                            $('download_form').submit();
-                            $('download_form').get_action.value = 'download';
+                            PydioApi.getClient().downloadSelection(null, $('download_form'), 'postcompress_download', {ope_id:'".$httpVars["ope_id"]."',archive_name:'".$archiveName."'});
                         ";
                         AJXP_XMLWriter::triggerBgJsAction($jsCode, $mess["powerfs.3"], true);
                         AJXP_XMLWriter::triggerBgAction("reload_node", array(), "powerfs.2", true, 2);
@@ -94,7 +85,7 @@ class PowerFSController extends AJXP_Plugin
 
             case "postcompress_download":
 
-                $archive = AJXP_Utils::getAjxpTmpDir()."/".$httpVars["ope_id"]."_".$httpVars["archive_name"];
+                $archive = AJXP_Utils::getAjxpTmpDir().DIRECTORY_SEPARATOR.$httpVars["ope_id"]."_".AJXP_Utils::sanitize(AJXP_Utils::decodeSecureMagic($httpVars["archive_name"]), AJXP_SANITIZE_FILENAME);
                 $fsDriver = AJXP_PluginsService::getInstance()->getUniqueActivePluginForType("access");
                 if (is_file($archive)) {
                     register_shutdown_function("unlink", $archive);
@@ -114,8 +105,8 @@ class PowerFSController extends AJXP_Plugin
                     AJXP_Controller::applyActionInBackground(ConfService::getRepository()->getId(), $action, $httpVars);
                     AJXP_XMLWriter::header();
                     $bgParameters = array(
-                        "dir" => $dir,
-                        "archive_name"  => $archiveName,
+                        "dir" => SystemTextEncoding::toUTF8($dir),
+                        "archive_name"  => SystemTextEncoding::toUTF8($archiveName),
                         "on_end" => (isSet($httpVars["on_end"])?$httpVars["on_end"]:"reload"),
                         "ope_id" => $opeId
                     );
@@ -156,9 +147,8 @@ class PowerFSController extends AJXP_Plugin
                     }
                 }
                 $cmdSeparator = ((PHP_OS == "WIN32" || PHP_OS == "WINNT" || PHP_OS == "Windows")? "&" : ";");
-                //$archiveName = SystemTextEncoding::fromUTF8($httpVars["archive_name"]);
                 if (!$compressLocally) {
-                    $archiveName = AJXP_Utils::getAjxpTmpDir()."/".$httpVars["ope_id"]."_".$archiveName;
+                    $archiveName = AJXP_Utils::getAjxpTmpDir().DIRECTORY_SEPARATOR.$httpVars["ope_id"]."_".$archiveName;
                 }
                 chdir($rootDir);
                 $cmd = $this->getFilteredOption("ZIP_PATH")." -r ".escapeshellarg($archiveName)." ".implode(" ", $args);

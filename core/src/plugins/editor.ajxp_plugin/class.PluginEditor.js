@@ -87,7 +87,7 @@ Class.create("PluginEditor", AbstractEditor, {
             conn.setParameters(toSubmit);
             conn.setMethod("post");
             conn.onComplete = function(transport){
-                ajaxplorer.actionBar.parseXmlMessage(transport.responseXML);
+                PydioApi.getClient().parseXmlMessage(transport.responseXML);
                 this.loadPluginConfig();
                 this.setClean();
             }.bind(this);
@@ -132,6 +132,9 @@ Class.create("PluginEditor", AbstractEditor, {
             var params = XPathSelectNodes(xmlData, "//global_param");
             var values = XPathSelectNodes(xmlData, "//plugin_settings_values/param");
             var documentation = XPathSelectSingleNode(xmlData, "//plugin_doc");
+            var enabledAlways = false;
+            try{enabledAlways = xmlData.firstChild.firstChild.attributes['enabled'].value === 'always';}catch (e){}
+
 
             var paramsValues = new Hash();
             $A(values).each(function(child){
@@ -145,7 +148,7 @@ Class.create("PluginEditor", AbstractEditor, {
 
 
             var driverParamsHash = $A([]);
-            if(this.pluginId.split("\.")[0] != "core"){
+            if(this.pluginId.split("\.")[0] != "core" && !enabledAlways){
                 driverParamsHash.push($H({
                     name:'AJXP_PLUGIN_ENABLED',
                     type:'boolean',
@@ -164,7 +167,7 @@ Class.create("PluginEditor", AbstractEditor, {
                 docDiv.select('img').each(function(img){
                     img.setStyle({width:'220px'});
                     img.setAttribute('src', 'plugins/'+ this.pluginId+'/'+img.getAttribute('src'));
-                });
+                }.bind(this));
                 this.docPane.insert({bottom:docDiv});
 
                 var pluginfo = docDiv.down("ul.pluginfo_list");
@@ -184,7 +187,7 @@ Class.create("PluginEditor", AbstractEditor, {
                 this.formManager.createParametersInputs(form, driverParamsHash, true, (paramsValues.size()?paramsValues:null));
                 this.formManager.disableShortcutsOnForm(form);
             }else{
-                form.update(MessageHash['ajxp_conf.105']);
+                form.update('<div style="padding: 10px;">No options for this plugin</div>');
             }
 
             if(form.SF_accordion){
@@ -197,7 +200,7 @@ Class.create("PluginEditor", AbstractEditor, {
             this.formManager.observeFormChanges(form, this.setDirty.bind(this));
 
 
-            ajaxplorer.blurAll();
+            pydio.UI.blurAll();
         }.bind(this);
         connexion.sendAsync();
     },
@@ -246,7 +249,8 @@ Class.create("PluginEditor", AbstractEditor, {
 
     mergeObjectsRecursive : function(source, destination){
         var newObject = {};
-        for (var property in source) {
+        var property;
+        for (property in source) {
             if (source.hasOwnProperty(property)) {
                 if( source[property] === null ) continue;
                 if( destination.hasOwnProperty(property)){
@@ -264,7 +268,7 @@ Class.create("PluginEditor", AbstractEditor, {
                 }
             }
         }
-        for (var property in destination){
+        for (property in destination){
             if(destination.hasOwnProperty(property) && !newObject.hasOwnProperty(property) && destination[property]!==null){
                 if(destination[property] instanceof Object) {
                     newObject[property] = this.mergeObjectsRecursive(destination[property], {});
@@ -287,7 +291,7 @@ Class.create("PluginEditor", AbstractEditor, {
         sync.sendSync();
         var encoded;
         if(seed != '-1'){
-            encoded = hex_md5(password);
+            encoded = HasherUtils.hex_md5(password);
         }else{
             encoded = password;
         }

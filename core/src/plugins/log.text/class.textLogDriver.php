@@ -63,6 +63,14 @@ class textLogDriver extends AbstractLogDriver
     }
 
     /**
+     * If the plugin is cloned, make sure to renew the $fileHandle
+     */
+    public function __clone() {
+        $this->close();
+        $this->open();
+    }
+
+    /**
      * Initialise storage: check and/or make log folder and file.
      */
     public function initStorage()
@@ -144,18 +152,20 @@ class textLogDriver extends AbstractLogDriver
      * @param String $ip The client ip
      * @param String $user The user login
      * @param String $source The source of the message
-     * @param String $prefix  The prefix of the message
+     * @param String $prefix The prefix of the message
      * @param String $message The message to log
+     * @throws Exception
      * @return void
      */
-    public function write2($level, $ip, $user, $source, $prefix, $message)
+    public function write2($level, $ip, $user, $source, $prefix, $message, $nodePathes = array())
     {
+        if(AJXP_Utils::detectXSS($message)) $message = "XSS Detected in message!";
         $textMessage = date("m-d-y") . " " . date("H:i:s") . "\t";
         $textMessage .= "$ip\t".strtoupper((string) $level)."\t$user\t$source\t$prefix\t$message\n";
 
         if ($this->fileHandle !== false) {
             if(count($this->stack)) $this->stackFlush();
-            if (@fwrite($this->fileHandle, $textMessage) === false) {
+            if (fwrite($this->fileHandle, $textMessage) === false) {
                 throw new Exception("There was an error writing to log file ($this->logFileName)");
             }
         } else {
@@ -185,6 +195,7 @@ class textLogDriver extends AbstractLogDriver
     {
         if(is_resource($this->fileHandle)){
             fclose($this->fileHandle);
+            $this->fileHandle = FALSE;
         }
     }
 
@@ -256,8 +267,14 @@ class textLogDriver extends AbstractLogDriver
         $lines = file($fName);
         foreach ($lines as $line) {
             $line = AJXP_Utils::xmlEntities($line);
-            $matches = explode("\t",$line,6);
-            if (count($matches) == 6) {
+            $matches = explode("\t",$line,7);
+            if (count($matches) == 6){
+                $matches[6] = $matches[5];
+                $matches[5] = $matches[4];
+                $matches[4] = $matches[3];
+                $matches[3] = "";
+            }
+            if (count($matches) == 7) {
                 $fileName = $parentDir."/".$matches[0];
                 foreach ($matches as $key => $match) {
                     $match = AJXP_Utils::xmlEntities($match);
@@ -269,7 +286,7 @@ class textLogDriver extends AbstractLogDriver
                 $date = $matches[0];
                 list($m,$d,$Y,$h,$i,$s) = sscanf($date, "%i-%i-%i %i:%i:%i");
                 $tStamp = mktime($h,$i,$s,$m,$d,$Y);
-                print(SystemTextEncoding::toUTF8("<$nodeName is_file=\"1\" ajxp_modiftime=\"$tStamp\" filename=\"$fileName\" ajxp_mime=\"log\" date=\"$matches[0]\" ip=\"$matches[1]\" level=\"$matches[2]\" user=\"$matches[3]\" action=\"$matches[4]\" params=\"$matches[5]\" icon=\"toggle_log.png\" />", false));
+                print(SystemTextEncoding::toUTF8("<$nodeName is_file=\"1\" ajxp_modiftime=\"$tStamp\" filename=\"$fileName\" ajxp_mime=\"log\" date=\"$matches[0]\" ip=\"$matches[1]\" level=\"$matches[2]\" user=\"$matches[3]\" source=\"$matches[4]\" action=\"$matches[5]\" params=\"$matches[6]\" icon=\"toggle_log.png\" />", false));
             }
         }
         return ;

@@ -32,7 +32,7 @@ class IMagickPreviewer extends AJXP_Plugin
     protected $onTheFly = false;
     protected $useOnTheFly = false;
 
-    protected $imagickExtensions = array("pdf", "svg", "tif", "tiff", "psd", "xcf", "eps", "cr2");
+    protected $imagickExtensions = array("pdf", "svg", "tif", "tiff", "psd", "xcf", "eps", "cr2","ai");
     protected $unoconvExtensios = array("xls", "xlt", "xlsx", "xltx", "ods", "doc", "dot", "docx", "dotx", "odt", "ppt", "pptx", "odp", "rtf");
 
     public function loadConfigs($configsData)
@@ -48,8 +48,6 @@ class IMagickPreviewer extends AJXP_Plugin
 
     public function switchAction($action, $httpVars, $filesVars)
     {
-        if(!isSet($this->actions[$action])) return false;
-
         $repository = ConfService::getRepository();
         if (!$repository->detectStreamWrapper(true)) {
             return false;
@@ -58,44 +56,50 @@ class IMagickPreviewer extends AJXP_Plugin
         if (empty($convert)) {
             return false;
         }
-        $streamData = $repository->streamData;
-        $destStreamURL = $streamData["protocol"]."://".$repository->getId();
-        $flyThreshold = 1024*1024*intval($this->getFilteredOption("ONTHEFLY_THRESHOLD", $repository->getId()));
+        $flyThreshold = 1024*1024*intval($this->getFilteredOption("ONTHEFLY_THRESHOLD", $repository));
+        $selection = new UserSelection($repository, $httpVars);
+        $destStreamURL = $selection->currentBaseUrl();
 
         if ($action == "imagick_data_proxy") {
             $this->extractAll = false;
-            if(isSet($httpVars["all"])) $this->extractAll = true;
-            $file = AJXP_Utils::decodeSecureMagic($httpVars["file"]);
+            $file = $selection->getUniqueNode()->getUrl();
+            if(!file_exists($file) || !is_readable($file)){
+                throw new Exception("Cannot find file");
+            }
+            if(isSet($httpVars["all"])) {
+                $this->logInfo('Preview', 'Preview content of '.$file, array("files" => $file));
+                $this->extractAll = true;
+            }
 
-            if (($size = filesize($destStreamURL.$file)) === false) {
-                return ;
+            if (($size = filesize($file)) === false) {
+                return false;
             } else {
                 if($size > $flyThreshold) $this->useOnTheFly = true;
                 else $this->useOnTheFly = false;
             }
 
             if ($this->extractAll) {
-                $node = new AJXP_Node($destStreamURL.$file);
+                $node = new AJXP_Node($file);
                 AJXP_Controller::applyHook("node.read", array($node));
             }
 
-            $cache = AJXP_Cache::getItem("imagick_".($this->extractAll?"full":"thumb"), $destStreamURL.$file, array($this, "generateJpegsCallback"));
+            $cache = AJXP_Cache::getItem("imagick_".($this->extractAll?"full":"thumb"), $file, array($this, "generateJpegsCallback"));
             $cacheData = $cache->getData();
 
             if (!$this->useOnTheFly && $this->extractAll) { // extract all on first view
                 $ext = pathinfo($file, PATHINFO_EXTENSION);
                 $prefix = str_replace(".$ext", "", $cache->getId());
-                $files = $this->listExtractedJpg($prefix);
+                $files = $this->listExtractedJpg($file, $prefix);
                 header("Content-Type: application/json");
                 print(json_encode($files));
-                return;
+                return false;
             } else if ($this->extractAll) { // on the fly extract mode
                 $ext = pathinfo($file, PATHINFO_EXTENSION);
                 $prefix = str_replace(".$ext", "", $cache->getId());
-                $files = $this->listPreviewFiles($destStreamURL.$file, $prefix);
+                $files = $this->listPreviewFiles($file, $prefix);
                 header("Content-Type: application/json");
                 print(json_encode($files));
-                return;
+                return false;
             } else {
                 header("Content-Type: image/jpeg; name=\"".basename($file)."\"");
                 header("Content-Length: ".strlen($cacheData));
@@ -104,13 +108,17 @@ class IMagickPreviewer extends AJXP_Plugin
                 header("Last-Modified: " . gmdate("D, d M Y H:i:s", time()-10000) . " GMT");
                 header("Expires: " . gmdate("D, d M Y H:i:s", time()+5*24*3600) . " GMT");
                 print($cacheData);
-                return;
+                return false;
             }
 
         } else if ($action == "get_extracted_page" && isSet($httpVars["file"])) {
             $file = (defined('AJXP_SHARED_CACHE_DIR')?AJXP_SHARED_CACHE_DIR:AJXP_CACHE_DIR)."/imagick_full/".AJXP_Utils::decodeSecureMagic($httpVars["file"]);
             if (!is_file($file)) {
                 $srcfile = AJXP_Utils::decodeSecureMagic($httpVars["src_file"]);
+                if($repository->hasContentFilter()){
+                    $contentFilter = $repository->getContentFilter();
+                    $srcfile = $contentFilter->filterExternalPath($srcfile);
+                }
                 $size = filesize($destStreamURL."/".$srcfile);
                 if($size > $flyThreshold) $this->useOnTheFly = true;
                 else $this->useOnTheFly = false;
@@ -119,13 +127,13 @@ class IMagickPreviewer extends AJXP_Plugin
                 $this->generateJpegsCallback($destStreamURL.$srcfile, $file);
 
             }
-            if(!is_file($file)) return ;
+            if(!is_file($file)) return false;
             header("Content-Type: image/jpeg; name=\"".basename($file)."\"");
             header("Content-Length: ".filesize($file));
             header('Cache-Control: public');
             readfile($file);
             exit(1);
-        } else if ($action == "delete_imagick_data" && isSet($httpVars["file"])) {
+        } else if ($action == "delete_imagick_data" && !$selection->isEmpty()) {
             /*
             $files = $this->listExtractedJpg(AJXP_CACHE_DIR."/".$httpVars["file"]);
             foreach ($files as $file) {
@@ -151,27 +159,39 @@ class IMagickPreviewer extends AJXP_Plugin
             AJXP_Cache::clearItem("imagick_thumb", $oldFile);
             $cache = AJXP_Cache::getItem("imagick_full", $oldFile, false);
             $prefix = str_replace(".".pathinfo($cache->getId(), PATHINFO_EXTENSION), "", $cache->getId());
-            $files = $this->listExtractedJpg($prefix);
+            $files = $this->listExtractedJpg($oldFile, $prefix);
             foreach ($files as $file) {
                 if(is_file((defined('AJXP_SHARED_CACHE_DIR')?AJXP_SHARED_CACHE_DIR:AJXP_CACHE_DIR)."/".$file["file"])) unlink(AJXP_CACHE_DIR."/".$file["file"]);
             }
         }
     }
 
-    protected function listExtractedJpg($prefix)
+    protected function listExtractedJpg($file, $prefix)
     {
+        $n = new AJXP_Node($file);
+        $path = $n->getPath();
         $files = array();
         $index = 0;
         while (is_file($prefix."-".$index.".jpg")) {
             $extract = $prefix."-".$index.".jpg";
             list($width, $height, $type, $attr) = @getimagesize($extract);
-            $files[] = array("file" => basename($extract), "width"=>$width, "height"=>$height);
+            $files[] = array(
+                "file" => basename($extract),
+                "width"=>$width,
+                "height"=>$height,
+                "rest"  => "/get_extracted_page/".basename($extract).str_replace("%2F", "/", urlencode($path))
+            );
             $index ++;
         }
         if (is_file($prefix.".jpg")) {
             $extract = $prefix.".jpg";
             list($width, $height, $type, $attr) = @getimagesize($extract);
-            $files[] = array("file" => basename($extract), "width"=>$width, "height"=>$height);
+            $files[] = array(
+                "file" => basename($extract),
+                "width"=>$width,
+                "height"=>$height,
+                "rest"  => "/get_extracted_page/".basename($extract).str_replace("%2F", "/", urlencode($path))
+            );
         }
         return $files;
     }
@@ -190,16 +210,29 @@ class IMagickPreviewer extends AJXP_Plugin
             }
         }
         $count = $this->countPages($file);
+        $n = new AJXP_Node($file);
+        $path = $n->getPath();
+
         while ($index < $count) {
             $extract = $prefix."-".$index.".jpg";
             list($width, $height, $type, $attr) = @getimagesize($extract);
-            $files[] = array("file" => basename($extract), "width"=>$width, "height"=>$height);
+            $files[] = array(
+                "file" => basename($extract),
+                "width"=>$width,
+                "height"=>$height,
+                "rest"  => "/get_extracted_page/".basename($extract).str_replace("%2F", "/", urlencode($path))
+            );
             $index ++;
         }
         if (is_file($prefix.".jpg")) {
             $extract = $prefix.".jpg";
             list($width, $height, $type, $attr) = @getimagesize($extract);
-            $files[] = array("file" => basename($extract), "width"=>$width, "height"=>$height);
+            $files[] = array(
+                "file" => basename($extract),
+                "width"=>$width,
+                "height"=>$height,
+                "rest"  => "/get_extracted_page/".basename($extract).str_replace("%2F", "/", urlencode($path))
+            );
         }
         return $files;
     }
@@ -242,12 +275,13 @@ class IMagickPreviewer extends AJXP_Plugin
         chdir($workingDir);
         if ($unoconv !== false && in_array(strtolower($extension), $officeExt)) {
             $unoDoc = preg_replace("/(-[0-9]+)?\\.jpg/", "_unoconv.pdf", $tmpFileThumb);
-            if (!is_file($unoDoc)) {
+            if (!is_file($unoDoc)  || (is_file($unoDoc) && (filesize($unoDoc) == 0))) {
                 if (stripos(PHP_OS, "win") === 0) {
                     $unoconv = $this->pluginConf["UNOCONV"]." -o ".escapeshellarg(basename($unoDoc))." -f pdf ".escapeshellarg($masterFile);
                 } else {
-                    $unoconv =  "HOME=/tmp ".$unoconv." --stdout -f pdf ".escapeshellarg($masterFile)." > ".escapeshellarg(basename($unoDoc));
+                    $unoconv =  "HOME=".AJXP_Utils::getAjxpTmpDir()." ".$unoconv." --stdout -f pdf ".escapeshellarg($masterFile)." > ".escapeshellarg(basename($unoDoc));
                 }
+                putenv('LC_CTYPE='.AJXP_LOCALE);
                 exec($unoconv, $out, $return);
             }
             if (is_file($unoDoc)) {
@@ -280,12 +314,15 @@ class IMagickPreviewer extends AJXP_Plugin
             putenv("PATH=".getenv("PATH").":".$customEnvPath);
         }
         $params = $customOptions." ".( $this->extractAll? $viewerQuality : $thumbQuality );
-        $cmd = $this->getFilteredOption("IMAGE_MAGICK_CONVERT")." ".escapeshellarg(($masterFile).$pageLimit)." ".$params." ".escapeshellarg($tmpFileThumb);
+        $cmd = $this->getFilteredOption("IMAGE_MAGICK_CONVERT")." ".$params." ".escapeshellarg(($masterFile).$pageLimit)." ".escapeshellarg($tmpFileThumb);
         $this->logDebug("IMagick Command : $cmd");
         session_write_close(); // Be sure to give the hand back
         exec($cmd, $out, $return);
         if (is_array($out) && count($out)) {
             throw new AJXP_Exception(implode("\n", $out));
+        }
+        if(!is_file($tmpFileThumb)){
+            throw new AJXP_Exception("Error while converting PDF file to JPG thumbnail. Return code '$return'. Command used '".$this->getFilteredOption("IMAGE_MAGICK_CONVERT")."': is the binary at the correct location? Is the server allowed to use it?");
         }
         if (!$this->extractAll) {
             rename($tmpFileThumb, $targetFile);
@@ -321,7 +358,7 @@ class IMagickPreviewer extends AJXP_Plugin
 
     protected function handleMime($filename)
     {
-        $mimesAtt = explode(",", $this->xPath->query("@mimes")->item(0)->nodeValue);
+        $mimesAtt = explode(",", $this->getXPath()->query("@mimes")->item(0)->nodeValue);
         $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
         return in_array($ext, $mimesAtt);
     }

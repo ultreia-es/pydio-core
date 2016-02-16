@@ -213,7 +213,7 @@ class remote_fsAccessWrapper implements AjxpWrapper
                 $wallet = $loggedUser->getPref("AJXP_WALLET");
                 if (is_array($wallet) && isSet($wallet[$this->repositoryId]["AUTH_USER"])) {
                     $this->user = $wallet[$this->repositoryId]["AUTH_USER"];
-                    $this->password = $loggedUser->decodeUserPassword($wallet[$this->repositoryId]["AUTH_PASS"]);
+                    $this->password = AJXP_Utils::decypherStandardFormPassword($loggedUser->getId(), $wallet[$this->repositoryId]["AUTH_PASS"]);
                 }
             }
         }
@@ -285,4 +285,13 @@ class remote_fsAccessWrapper implements AjxpWrapper
     }
 
 
+    /**
+     * Describe whether the current wrapper can rewind a stream or not.
+     * @static
+     * @return boolean
+     */
+    public static function isSeekable($url)
+    {
+        return false;
+    }
 }

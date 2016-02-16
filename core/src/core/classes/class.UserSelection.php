@@ -27,6 +27,9 @@ defined('AJXP_EXEC') or die( 'Access not allowed');
 class UserSelection
 {
     public $files;
+    /**
+     * @var AJXP_Node[]
+     */
     private $nodes;
     public $varPrefix = "file";
     public $dirPrefix = "dir";
@@ -36,12 +39,26 @@ class UserSelection
     public $inZip = false;
     public $zipFile;
     public $localZipPath;
+
+    /**
+     * @var Repository
+     */
+    private $repository;
+
     /**
      * Construction selector
+     * @param Repository|null $repository
+     * @param array|null $httpVars
      */
-    public function UserSelection()
+    public function __construct($repository = null, $httpVars = null)
     {
         $this->files = array();
+        if(isSet($repository)){
+            $this->repository = $repository;
+        }
+        if(iSset($httpVars)){
+            $this->initFromHttpVars($httpVars);
+        }
     }
     /**
      * Init the selection from the query vars
@@ -59,6 +76,9 @@ class UserSelection
         } else {
             $this->initFromArray($_GET);
             $this->initFromArray($_POST);
+        }
+        if(isSet($this->repository) && $this->repository->hasContentFilter()){
+            $this->repository->getContentFilter()->filterUserSelection($this);
         }
     }
 
@@ -89,14 +109,22 @@ class UserSelection
             return ;
         }
         if (isSet($array[$this->varPrefix]) && $array[$this->varPrefix] != "") {
-            $this->files[] = AJXP_Utils::decodeSecureMagic($array[$this->varPrefix]);
+            $v = $array[$this->varPrefix];
+            if(strpos($v, "base64encoded:") === 0){
+                $v = base64_decode(array_pop(explode(':', $v, 2)));
+            }
+            $this->files[] = AJXP_Utils::decodeSecureMagic($v);
             $this->isUnique = true;
             //return ;
         }
         if (isSet($array[$this->varPrefix."_0"])) {
             $index = 0;
             while (isSet($array[$this->varPrefix."_".$index])) {
-                $this->files[] = AJXP_Utils::decodeSecureMagic($array[$this->varPrefix."_".$index]);
+                $v = $array[$this->varPrefix."_".$index];
+                if(strpos($v, "base64encoded:") === 0){
+                    $v = base64_decode(array_pop(explode(':', $v, 2)));
+                }
+                $this->files[] = AJXP_Utils::decodeSecureMagic($v);
                 $index ++;
             }
             $this->isUnique = false;
@@ -120,7 +148,7 @@ class UserSelection
                 $this->localZipPath = $test[1];
             }
         } else if (!$this->isEmpty() && $this->isUnique()) {
-            if ($test = $this->detectZip($this->files[0])) {
+            if ($test = $this->detectZip(AJXP_Utils::safeDirname($this->files[0]))) {
                 $this->inZip = true;
                 $this->zipFile = $test[0];
                 $this->localZipPath = $test[1];
@@ -133,7 +161,7 @@ class UserSelection
      */
     public function isUnique()
     {
-        return $this->isUnique;
+        return (count($this->files) == 1);
     }
     /**
      * Are we currently inside a zip?
@@ -190,47 +218,55 @@ class UserSelection
     }
 
     /**
-     * @param AbstractAccessDriver $accessDriver
      * @return AJXP_Node
      * @throws Exception
      */
-    public function getUniqueNode(AbstractAccessDriver $accessDriver)
+    public function getUniqueNode()
     {
         if (isSet($this->nodes) && is_array($this->nodes)) {
             return $this->nodes[0];
         }
-        $repo = $accessDriver->repository;
+        if(!isSet($this->repository)){
+            throw new Exception("UserSelection: cannot build nodes URL without a proper repository");
+        }
         $user = AuthService::getLoggedUser();
-        if (!AuthService::usersEnabled() && $user!=null && !$user->canWrite($repo->getId())) {
+        if (!AuthService::usersEnabled() && $user!=null && !$user->canWrite($this->repository->getId())) {
             throw new Exception("You have no right on this action.");
         }
 
         $currentFile = $this->getUniqueFile();
-        $wrapperData = $accessDriver->detectStreamWrapper(false);
-        $urlBase = $wrapperData["protocol"]."://".$accessDriver->repository->getId();
+        $urlBase = "pydio://".$this->repository->getId();
         $ajxpNode = new AJXP_Node($urlBase.$currentFile);
         return $ajxpNode;
 
     }
 
     /**
-     * @param AbstractAccessDriver $accessDriver
      * @return AJXP_Node[]
      * @throws Exception
      */
-    public function buildNodes(AbstractAccessDriver $accessDriver)
+    public function buildNodes()
     {
         if (isSet($this->nodes)) {
             return $this->nodes;
         }
-        $wrapperData = $accessDriver->detectStreamWrapper(false);
-        $urlBase = $wrapperData["protocol"]."://".$accessDriver->repository->getId();
+        if(!isSet($this->repository)){
+            throw new Exception("UserSelection: cannot build nodes URL without a proper repository");
+        }
+        $urlBase = "pydio://".$this->repository->getId();
         $nodes = array();
         foreach ($this->files as $file) {
             $nodes[] = new AJXP_Node($urlBase.$file);
         }
         return $nodes;
 
+    }
+
+    public function currentBaseUrl(){
+        if(!isSet($this->repository)){
+            throw new Exception("UserSelection::currentBaseUrl: cannot build nodes URL without a proper repository");
+        }
+        return "pydio://".$this->repository->getId();
     }
 
     /**
@@ -253,7 +289,7 @@ class UserSelection
     public static function detectZip($dirPath)
     {
         if (preg_match("/\.zip\//i", $dirPath) || preg_match("/\.zip$/i", $dirPath)) {
-            $contExt = strpos(strtolower($dirPath), ".zip");
+            $contExt = strrpos(strtolower($dirPath), ".zip");
             $zipPath = substr($dirPath, 0, $contExt+4);
             $localPath = substr($dirPath, $contExt+4);
             if($localPath == "") $localPath = "/";
@@ -269,6 +305,25 @@ class UserSelection
     public function setFiles($files)
     {
         $this->files = $files;
+    }
+
+    public function removeFile($file){
+        $newFiles = array();
+        foreach($this->files as $k => $f){
+            if($f != $file) $newFiles[] = $file;
+        }
+        $this->files = $newFiles;
+        if(isSet($this->nodes)){
+            $newNodes = array();
+            foreach($this->nodes as $l => $n){
+                if($n->getPath() != $file) $newNodes[] = $n;
+            }
+            $this->nodes = $newNodes;
+        }
+    }
+
+    public function addFile($file){
+        $this->files[] = $file;
     }
 
 }

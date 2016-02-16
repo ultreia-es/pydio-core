@@ -30,9 +30,14 @@ if (function_exists("xdebug_disable")) {
 //setlocale(LC_ALL, '');
 @libxml_disable_entity_loader(false);
 
-list($vNmber,$vDate) = explode("__",file_get_contents(AJXP_CONF_PATH."/VERSION"));
-define("AJXP_VERSION", $vNmber);
-define("AJXP_VERSION_DATE", $vDate);
+@include_once("VERSION.php");
+if(!defined("AJXP_VERSION")){
+    list($vNmber,$vDate,$vRevision,$vDbVersion) = explode("__",file_get_contents(AJXP_CONF_PATH."/VERSION"));
+    define("AJXP_VERSION", $vNmber);
+    define("AJXP_VERSION_DATE", $vDate);
+    if(!empty($vRevision)) define("AJXP_VERSION_REV", $vRevision);
+    if(!empty($vDbVersion)) define("AJXP_VERSION_DB", intval($vDbVersion));
+}
 
 define("AJXP_EXEC", true);
 
@@ -43,6 +48,8 @@ define("AJXP_SHARED_CACHE_DIR", AJXP_INSTALL_PATH."/data/cache");
 define("AJXP_PLUGINS_CACHE_FILE", AJXP_CACHE_DIR."/plugins_cache.ser");
 define("AJXP_PLUGINS_REQUIRES_FILE", AJXP_CACHE_DIR."/plugins_requires.ser");
 define("AJXP_PLUGINS_QUERIES_CACHE", AJXP_CACHE_DIR."/plugins_queries.ser");
+define("AJXP_PLUGINS_BOOTSTRAP_CACHE", AJXP_CACHE_DIR."/plugins_bootstrap.php");
+define("AJXP_PLUGINS_REPOSITORIES_CACHE", AJXP_CACHE_DIR."/plugins_repositories.php");
 define("AJXP_PLUGINS_MESSAGES_FILE", AJXP_CACHE_DIR."/plugins_messages.ser");
 define("AJXP_SERVER_ACCESS", "index.php");
 define("AJXP_PLUGINS_FOLDER", "plugins");
@@ -53,7 +60,6 @@ define("AJXP_COREI18N_FOLDER", AJXP_INSTALL_PATH."/plugins/core.ajaxplorer/i18n"
 define("TESTS_RESULT_FILE", AJXP_CACHE_DIR."/diag_result.php");
 define("AJXP_TESTS_FOLDER", AJXP_INSTALL_PATH."/core/tests");
 define("INITIAL_ADMIN_PASSWORD", "admin");
-define("SOFTWARE_UPDATE_SITE", "http://www.ajaxplorer.info/update/");
 // Startup admin password (used at first creation). Once
 // The admin password is created and his password is changed,
 // this config has no more impact.
@@ -64,12 +70,14 @@ define("ADMIN_PASSWORD", "admin");
 // example in log.serial. Do not forget the trailing slash
 // define("AJXP_FORCE_LOGPATH", "/var/log/ajaxplorer/");
 
+// KEY-VALUE-CACHE
+define("AJXP_KVCACHE_PREFIX", "pydio-unique-id");
+define("AJXP_KVCACHE_IGNORE", true);
 
 // DEBUG OPTIONS
 define("AJXP_CLIENT_DEBUG"  ,	false);
 define("AJXP_SERVER_DEBUG"  ,	false);
 define("AJXP_SKIP_CACHE"    ,   false);
-
 
 // PBKDF2 CONSTANTS FOR A SECURE STORAGE OF PASSWORDS
 // These constants may be changed without breaking existing hashes.
@@ -90,6 +98,9 @@ define("USE_OPENSSL_RANDOM", false);
 
 function AjaXplorer_autoload($className)
 {
+    if($className == "dibi"){
+        require_once(AJXP_BIN_FOLDER."/dibi/dibi.php");
+    }
     $fileName = AJXP_BIN_FOLDER."/"."class.".$className.".php";
     if (file_exists($fileName)) {
         require_once($fileName);
@@ -121,6 +132,25 @@ if (is_file(AJXP_CONF_PATH."/bootstrap_conf.php")) {
         foreach($AJXP_INISET as $key => $value) AJXP_Utils::safeIniSet($key, $value);
     }
     if (defined('AJXP_LOCALE')) {
-        setlocale(LC_ALL, AJXP_LOCALE);
+        setlocale(LC_CTYPE, AJXP_LOCALE);
+    }else if(file_exists(AJXP_DATA_PATH."/plugins/boot.conf/encoding.php")){
+        require_once(AJXP_DATA_PATH."/plugins/boot.conf/encoding.php");
+        if(isSet($ROOT_ENCODING)){
+            setlocale(LC_CTYPE, $ROOT_ENCODING);
+        }
     }
+}
+
+if(!is_file(AJXP_PLUGINS_BOOTSTRAP_CACHE)){
+    $content = "<?php \n";
+    $boots = glob(AJXP_INSTALL_PATH."/".AJXP_PLUGINS_FOLDER."/*/bootstrap.php");
+    if($boots !== false){
+        foreach($boots as $b){
+            $content .= 'require_once("'.$b.'");'."\n";
+        }
+    }
+    $resWriteBootstrapCache = @file_put_contents(AJXP_PLUGINS_BOOTSTRAP_CACHE, $content);
+}
+if(!isSet($resWriteBootstrapCache) || $resWriteBootstrapCache !== false){
+    require_once(AJXP_PLUGINS_BOOTSTRAP_CACHE);
 }

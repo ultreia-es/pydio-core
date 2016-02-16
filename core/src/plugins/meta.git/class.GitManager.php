@@ -26,7 +26,7 @@ defined('AJXP_EXEC') or die('Access not allowed');
  * @package AjaXplorer_Plugins
  * @subpackage Meta
  */
-class GitManager extends AJXP_Plugin
+class GitManager extends AJXP_AbstractMetaSource
 {
 
     private $repoBase;
@@ -39,11 +39,19 @@ class GitManager extends AJXP_Plugin
         }
     }
 
+    /**
+     * @param AbstractAccessDriver $accessDriver
+     * @throws Exception
+     */
     public function initMeta($accessDriver)
     {
+        parent::initMeta($accessDriver);
         require_once("VersionControl/Git.php");
-        $repo = ConfService::getRepository();
+        $repo = $accessDriver->repository;
         $this->repoBase = $repo->getOption("PATH");
+        if(empty($this->repoBase)){
+            throw new Exception("Meta.git: cannot find PATH option in repository! Are you sure it's an FS-based workspace?");
+        }
         if (!is_dir($this->repoBase.DIRECTORY_SEPARATOR.".git")) {
             $git = new VersionControl_Git($this->repoBase);
             $git->initRepository();
@@ -57,7 +65,6 @@ class GitManager extends AJXP_Plugin
             case "git_history":
                 $file = AJXP_Utils::decodeSecureMagic($httpVars["file"]);
                 $file = ltrim($file, "/");
-
                 $res = $this->gitHistory($git, $file);
                 AJXP_XMLWriter::header();
                 $ic = AJXP_Utils::mimetype($file, "image", false);
@@ -80,7 +87,6 @@ class GitManager extends AJXP_Plugin
                 $originalFile = AJXP_Utils::decodeSecureMagic($httpVars["original_file"]);
                 $file = AJXP_Utils::decodeSecureMagic($httpVars["file"]);
                 $commitId = $httpVars["commit_id"];
-                $attach = $httpVars["attach"];
 
                 $command = $git->getCommand("cat-file");
                 $command->setOption("s", true);
@@ -184,7 +190,10 @@ class GitManager extends AJXP_Plugin
     protected function gitHistory($git, $file)
     {
         $command = $git->getCommand("log");
-        $command->setOption("follow", true);
+        if(strpos($file, " ") === false){
+            // We currently cannot use follow if file/folder has a space
+            $command->setOption("follow", true);
+        }
         $command->setOption("p", true);
         $command->addArgument($file);
         //var_dump($command->createCommandString());
@@ -277,10 +286,13 @@ class GitManager extends AJXP_Plugin
         $command = $git->getCommand("commit");
         $command->setOption("a", true);
         $userId = "no user";
+        $mail = "mail@mail.com";
         if (AuthService::getLoggedUser()!=null) {
             $userId = AuthService::getLoggedUser()->getId();
+            $mail = AuthService::getLoggedUser()->personalRole->filterParameterValue("core.conf", "email", AJXP_REPO_SCOPE_ALL, "mail@mail.com");
         }
         $command->setOption("m", $userId);
+        $command->setOption("author", "$userId <$mail>");
         //$command->addArgument($path);
 
         try {

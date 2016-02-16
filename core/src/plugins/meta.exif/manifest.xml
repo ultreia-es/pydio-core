@@ -4,7 +4,7 @@
 	<client_settings icon="plugins/access.mysql/resources/images/mysql_icon.png">
 		<resources>
 			<i18n namespace="meta.exif" path="plugins/meta.exif/i18n" />
-			<js file="plugins/meta.exif/class.ExifCellRenderer.js" className="ExifCellRenderer" autoload="true"/>
+			<js file="plugins/meta.exif/class.ExifCellRenderer.js" className="ExifCellRenderer" depends="OLViewer"/>
 		</resources>
 	</client_settings>
 	<server_settings>
@@ -13,7 +13,7 @@
 	</server_settings>
 	<registry_contributions>
 		<hooks>
-			<serverCallback hookName="node.info" methodName="extractMeta" applyCondition="$apply=($args[2]!='minimal');"></serverCallback>
+			<serverCallback hookName="node.info" methodName="extractMeta" applyCondition="$apply=($args[2]!='minimal');"/>
 		</hooks>
 		<client_configs>
 			<component_config className="InfoPanel">
@@ -25,7 +25,11 @@
 		<actions>
 			<action name="extract_exif">
 				<processing>
-					<serverCallback methodName="extractExif"/>
+					<serverCallback methodName="extractExif" restParams="/format/file+" developerComment="Extract all exif data from a compatible image (JPG).">
+                        <input_param name="file" type="path" description="Path to the file to analyze"/>
+                        <input_param name="format" type="string" description="json|xml: Get json instead of xml (default)"/>
+                        <output type="XML" description="An XML structure containing all Exif tags"/>
+					</serverCallback>
 				</processing>
 			</action>
 		</actions>

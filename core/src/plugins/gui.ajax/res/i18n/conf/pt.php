@@ -42,7 +42,7 @@ $mess=array(
 "Analytics ID" => "ID Estatísticas",
 "Id of your GA account, something like UE-XXXX-YY" => "ID da sua conta GA, algo como 'UE-XXXX-YY'",
 "Analytics Domain" => "Domínio das Estatísticas",
-"Set the domain for yuor analytics reports (not mandatory!)" => "Introduza o domínio para os relatórios das estatísticas (não é obrigatório)",
+"Set the domain for your analytics reports (not mandatory!)" => "Introduza o domínio para os relatórios das estatísticas (não é obrigatório)",
 "Analytics Events" => "Eventos de Estatísticas",
 "Use Events Logging, experimental only implemented on download action in Pydio" => "Usar Registo de eventos, experimental, apenas implementado na área de transferências do Pydio",
 "Icon Only" => "Icon Only",
@@ -63,4 +63,8 @@ $mess=array(
 "Manually set a top offset" => "Manually set a top offset",
 "Logo Left" => "Logo Left",
 "Manually set a left offset" => "Manually set a left offset",
+"Set up some application parameters. If you enable Emails, please use the Test button to check if your php is correctly configured." => "Set up some application parameters. If you enable Emails, please use the Test button to check if your php is correctly configured.",
+"Detected Encoding" => "Detected Encoding",
+"Detected Server Path" => "Detected Server Path",
+"Application Title" => "Application Title",
 );

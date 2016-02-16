@@ -34,7 +34,7 @@ class plgUserPydio extends JPlugin
      * @param 	array  $config  An array that holds the plugin configuration
      * @since 1.6
      */
-    public function plgUserPydio(& $subject, $config)
+    public function __construct(& $subject, $config)
     {
         parent::__construct($subject, $config);
         $this->_plugin = JPluginHelper::getPlugin( 'user', 'pydio' );
@@ -140,7 +140,8 @@ class plgUserPydio extends JPlugin
         $AJXP_GLUE_GLOBALS["autoCreate"] = $this->autoCreate;
         $AJXP_GLUE_GLOBALS["plugInAction"] = "login";
         $AJXP_GLUE_GLOBALS["login"] = array("name"=>$user["username"], "password"=>$user["password"]);
-           include($this->glueCode);
+        include($this->glueCode);
+        new SessionSwitcher("previous", false, true);
         return true;
     }
 

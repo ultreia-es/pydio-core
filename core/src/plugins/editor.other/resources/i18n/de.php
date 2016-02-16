@@ -19,9 +19,9 @@
  * The latest code can be found at <http://pyd.io/>.
  */
 $mess=array(
-"1" => "Anderen wählen...",
-"2" => "Anderen Editor wählen",
+"1" => "Anderer Editor...",
+"2" => "Die Datei in einem anderen Editor öffnen",
 "3" => "Einen anderen Editor zum Öffnen dieser Datei wählen",
-"4" => "Achtung dieser Editor ist nicht geeignet zum Öffnen dieses Dateityps, das Verhalten ist nicht vorhersehbar!",
-"5" => "Clear existing associations",
+"4" => "Achtung, einige Editoren unterstützen diesen Dateityp nicht. Das Verhalten dieser Editoren ist nicht vorhersehbar.",
+"5" => "Bestehende Zuordnung löschen",
 );

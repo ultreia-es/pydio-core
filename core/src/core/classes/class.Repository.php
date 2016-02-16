@@ -111,7 +111,39 @@ class Repository implements AjxpGroupPathProvider
     protected $groupPath;
 
 
+    /**
+     * @var AbstractAccessDriver
+     */
     public $driverInstance;
+
+    /**
+     * @var ContentFilter
+     */
+    protected $contentFilter;
+
+    /**
+     * @param \ContentFilter $contentFilter
+     */
+    public function setContentFilter($contentFilter)
+    {
+        $this->contentFilter = $contentFilter;
+    }
+
+    /**
+     * Check if a ContentFilter is set or not
+     * @return bool
+     */
+    public function hasContentFilter(){
+        return isSet($this->contentFilter);
+    }
+
+    /**
+     * @return \ContentFilter
+     */
+    public function getContentFilter()
+    {
+        return $this->contentFilter;
+    }
 
     /**
      * @param string $id
@@ -119,7 +151,7 @@ class Repository implements AjxpGroupPathProvider
      * @param string $driver
      * @return void
      */
-    public function Repository($id, $display, $driver)
+    public function __construct($id, $display, $driver)
     {
         $this->setAccessType($driver);
         $this->setDisplay($display);
@@ -146,10 +178,15 @@ class Repository implements AjxpGroupPathProvider
     {
         $repo = new Repository(0, $newLabel, $this->accessType);
         $newOptions = array_merge($this->options, $newOptions);
+        $newOptions["CREATION_TIME"] = time();
+        if (AuthService::usersEnabled() && AuthService::getLoggedUser() != null) {
+            $newOptions["CREATION_USER"] = AuthService::getLoggedUser()->getId();
+        }
         $repo->options = $newOptions;
         if ($parentId == null) {
             $parentId = $this->getId();
         }
+        $repo->setInferOptionsFromParent(true);
         $repo->setOwnerData($parentId, $owner, $uniqueUser);
         return $repo;
     }
@@ -164,6 +201,10 @@ class Repository implements AjxpGroupPathProvider
     public function createTemplateChild($newLabel, $newOptions, $owner = null, $uniqueUser = null)
     {
         $repo = new Repository(0, $newLabel, $this->accessType);
+        $newOptions["CREATION_TIME"] = time();
+        if (AuthService::usersEnabled() && AuthService::getLoggedUser() != null) {
+            $newOptions["CREATION_USER"] = AuthService::getLoggedUser()->getId();
+        }
         $repo->options = $newOptions;
         $repo->setOwnerData($this->getId(), $owner, $uniqueUser);
         $repo->setInferOptionsFromParent(true);
@@ -246,7 +287,12 @@ class Repository implements AjxpGroupPathProvider
      */
     public function detectStreamWrapper($register = false, &$streams=null)
     {
-        $plugin = AJXP_PluginsService::findPlugin("access", $this->accessType);
+        if(isSet($this->driverInstance) && is_a($this->driverInstance, "AJXP_Plugin")){
+            $plugin = $this->driverInstance;
+        }else{
+            $plugin = AJXP_PluginsService::findPlugin("access", $this->accessType);
+            $this->driverInstance = $plugin;
+        }
         if(!$plugin) return(false);
         $streamData = $plugin->detectStreamWrapper($register);
         if (!$register && $streamData !== false && is_array($streams)) {
@@ -269,20 +315,26 @@ class Repository implements AjxpGroupPathProvider
         }
         $this->options[$oName] = $oValue;
     }
+
     /**
      * Get the repository options, filtered in various maners
      * @param string $oName
      * @param bool $safe Do not filter
+     * @param AbstractAjxpUser $resolveUser
      * @return mixed|string
+     * @throws Exception
      */
-    public function getOption($oName, $safe=false)
+    public function getOption($oName, $safe=false, $resolveUser = null)
     {
-        if (!$safe && $this->inferOptionsFromParent) {
-            if (!isset($this->parentTemplateObject)) {
-                $this->parentTemplateObject = ConfService::getRepositoryById($this->parentId);
+        if(isSet($this->inferOptionsFromParent) && isSet($this->parentId)){
+            $parentTemplateObject = ConfService::getRepositoryById($this->parentId);
+            if(empty($parentTemplateObject) || !is_a($parentTemplateObject, "Repository")) {
+                throw new Exception("Option should be loaded from parent repository, but it was not found");
             }
-            if (isSet($this->parentTemplateObject)) {
-                $value = $this->parentTemplateObject->getOption($oName, $safe);
+        }
+        if (!$safe && $this->inferOptionsFromParent) {
+            if (isSet($parentTemplateObject)) {
+                $value = $parentTemplateObject->getOption($oName, $safe);
                 if (is_string($value) && strstr($value, "AJXP_ALLOW_SUB_PATH") !== false) {
                     $val = rtrim(str_replace("AJXP_ALLOW_SUB_PATH", "", $value), "/")."/".$this->options[$oName];
                     return AJXP_Utils::securePath($val);
@@ -291,15 +343,15 @@ class Repository implements AjxpGroupPathProvider
         }
         if (isSet($this->options[$oName])) {
             $value = $this->options[$oName];
-            if(!$safe) $value = AJXP_VarsFilter::filter($value);
+            if(!$safe) $value = AJXP_VarsFilter::filter($value, $resolveUser);
             return $value;
         }
         if ($this->inferOptionsFromParent) {
-            if (!isset($this->parentTemplateObject)) {
-                $this->parentTemplateObject = ConfService::getRepositoryById($this->parentId);
+            if (!isset($parentTemplateObject)) {
+                $parentTemplateObject = ConfService::getRepositoryById($this->parentId);
             }
-            if (isSet($this->parentTemplateObject)) {
-                return $this->parentTemplateObject->getOption($oName, $safe);
+            if (isSet($parentTemplateObject)) {
+                return $parentTemplateObject->getOption($oName, $safe);
             }
         }
         return "";
@@ -379,7 +431,7 @@ class Repository implements AjxpGroupPathProvider
         if (isSet($this->displayStringId)) {
             $mess = ConfService::getMessages();
             if (isSet($mess[$this->displayStringId])) {
-                return SystemTextEncoding::fromUTF8($mess[$this->displayStringId]);
+                return $mess[$this->displayStringId];
             }
         }
         return AJXP_VarsFilter::filter($this->display);
@@ -390,7 +442,7 @@ class Repository implements AjxpGroupPathProvider
      */
     public function getId()
     {
-        if($this->isWriteable()) return $this->getUniqueId();
+        if($this->isWriteable() || $this->id === null) return $this->getUniqueId();
         return $this->id;
     }
 
@@ -528,9 +580,11 @@ class Repository implements AjxpGroupPathProvider
     }
 
     /**
+     * @param bool $public
+     * @param null $ownerLabel
      * @return String
      */
-    public function getDescription ()
+    public function getDescription( $public = false, $ownerLabel = null )
     {
         $m = ConfService::getMessages();
         if (isset($this->options["USER_DESCRIPTION"]) && !empty($this->options["USER_DESCRIPTION"])) {
@@ -539,12 +593,20 @@ class Repository implements AjxpGroupPathProvider
             } else {
                 return $this->options["USER_DESCRIPTION"];
             }
-        }if (isSet($this->parentId) && isset($this->owner)) {
+        }
+        if (isSet($this->parentId) && isset($this->owner)) {
             if (isSet($this->options["CREATION_TIME"])) {
                 $date = AJXP_Utils::relativeDate($this->options["CREATION_TIME"], $m);
-                return str_replace(array("%date", "%user"), array($date, $this->owner), $m["473"]);
+                return str_replace(
+                    array("%date", "%user"),
+                    array($date, $ownerLabel!= null ? $ownerLabel : $this->owner),
+                    $public?$m["470"]:$m["473"]);
             } else {
-                return str_replace(array("%user"), array($this->owner), $m["472"]);
+                if($public) return $m["474"];
+                else return str_replace(
+                    array("%user"),
+                    array($ownerLabel!= null ? $ownerLabel : $this->owner),
+                    $m["472"]);
             }
         } else if ($this->isWriteable() && isSet($this->options["CREATION_TIME"])) {
             $date = AJXP_Utils::relativeDate($this->options["CREATION_TIME"], $m);
@@ -565,8 +627,23 @@ class Repository implements AjxpGroupPathProvider
      */
     public function securityScope()
     {
+        if($this->hasParent()){
+            $parentRepo = ConfService::getRepositoryById($this->getParentId());
+            if(!empty($parentRepo) && $parentRepo->isTemplate){
+                $path = $parentRepo->getOption("PATH", true);
+                $container = $parentRepo->getOption("CONTAINER", true);
+                // If path is set in the template, compute identifier from the template path.
+                if(!empty($path) || !empty($container)) return $parentRepo->securityScope();
+            }
+        }
+        $path = $this->getOption("CONTAINER", true);
+        if(!empty($path)){
+            if(strpos($path, "AJXP_USER") !== false) return "USER";
+            if(strpos($path, "AJXP_GROUP_PATH") !== false) return "GROUP";
+            if(strpos($path, "AJXP_GROUP_PATH_FLAT") !== false) return "GROUP";
+        }
         $path = $this->getOption("PATH", true);
-        if($this->accessType == "ajxp_conf") return "USER";
+        if($this->accessType == "ajxp_conf" || $this->accessType == "ajxp_admin") return "USER";
         if(empty($path)) return false;
         if(strpos($path, "AJXP_USER") !== false) return "USER";
         if(strpos($path, "AJXP_GROUP_PATH") !== false) return "GROUP";

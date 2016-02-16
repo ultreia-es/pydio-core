@@ -27,8 +27,6 @@ defined('AJXP_EXEC') or die( 'Access not allowed');
  */
 class AJXP_Cache
 {
-    private static $instance;
-
     protected $cacheDir;
     protected $cacheId;
     protected $masterFile;
@@ -39,7 +37,7 @@ class AJXP_Cache
      * Create an AJXP_Cache instance
      * @param string $pluginId
      * @param string $filepath
-     * @param Function $dataCallback A function to generate the data cache. If no callback provided, will simply use the content of the master item as the cache data
+     * @param callable $dataCallback A function to generate the data cache. If no callback provided, will simply use the content of the master item as the cache data
      * @param string $idComputerCallback A function to generate the ID of the cache. If not provided, will generate a random hash
      * @return AJXP_Cache
      */
@@ -73,7 +71,6 @@ class AJXP_Cache
     public static function clearItem($pluginId, $filepath)
     {
         $inst = new AJXP_Cache($pluginId,$filepath, false);
-        AJXP_Logger::debug("SHOULD REMOVE ".$inst->getId());
         if (file_exists($inst->getId())) {
             @unlink($inst->getId());
         }
@@ -87,8 +84,7 @@ class AJXP_Cache
      * @param null $idComputerCallback
      * @return void
      */
-    public function AJXP_Cache($pluginId, $filepath, $dataCallback, $idComputerCallback = NULL)
-    {
+    function __construct($pluginId, $filepath, $dataCallback, $idComputerCallback = NULL) {
         $this->cacheDir = (defined('AJXP_SHARED_CACHE_DIR')?AJXP_SHARED_CACHE_DIR:AJXP_CACHE_DIR);
         $this->masterFile = $filepath;
         $this->dataCallback = $dataCallback;
@@ -105,13 +101,12 @@ class AJXP_Cache
     public function getData()
     {
         if (!$this->hasCachedVersion()) {
-            AJXP_Logger::debug("caching data", $this->dataCallback);
             $result = call_user_func($this->dataCallback, $this->masterFile, $this->cacheId);
             if ($result !== false) {
                 $this->touch();
             }
         } else {
-            AJXP_Logger::debug("getting from cache");
+
         }
         return file_get_contents($this->cacheId);
     }

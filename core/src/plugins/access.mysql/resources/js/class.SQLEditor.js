@@ -139,7 +139,7 @@ Class.create("SQLEditor", {
 				el.setAttribute('name', 'ajxp_mysql_'+el.getAttribute('name'));
 			}
 		}.bind(this));
-		ajaxplorer.actionBar.submitForm(oForm, true);
+		PydioApi.getClient().submitForm(oForm, true);
 		hideLightBox();
 	},
 	
@@ -158,7 +158,7 @@ Class.create("SQLEditor", {
 			columns.each(function(col){
 				col['field_origname'] = col['field_name'];
 			});
-			this.oForm.insert(new Element('input', {type:'hidden',name:'current_table',value:getBaseName(tableName)}));
+			this.oForm.insert(new Element('input', {type:'hidden',name:'current_table',value:getBaseName(tableName.stripTags())}));
 			this.displayTableEditorForm(columns.length, fields, columns);
 		}
 	},
@@ -169,7 +169,7 @@ Class.create("SQLEditor", {
 		var button = chooser.down('input[id="toNext"]');
 		button.observe('click', function(e){
 			Event.stop(e);
-			this.newTableName = chooser.down('input[id="table_name"]').getValue();
+			this.newTableName = chooser.down('input[id="table_name"]').getValue().stripTags();
 			var fieldsNumber = parseInt(chooser.down('input[id="fields_number"]').getValue());
 			if(this.newTableName && fieldsNumber){
 				chooser.remove();
@@ -196,7 +196,7 @@ Class.create("SQLEditor", {
 			});
 			//addTable.select('td[edit="false"]').invoke('remove');
 			addTable.select('td[new="false"]')[0].setStyle({width:'40px'});
-			addRow = addTable.select('tbody tr')[0];
+			var addRow = addTable.select('tbody tr')[0];
 			var addButton = new Element('input', {type:'button', value:'Add', className:'dialogButton'});
 			var submitDiv = new Element('div', {className:'dialogButtons'}).insert(addButton);
 			var submitRow = new Element('tr').insert(new Element('td', {colspan:"9"}).insert(submitDiv));
@@ -230,9 +230,10 @@ Class.create("SQLEditor", {
 				style:'cursor:pointer;'
 			});
 			activator.insert({before:deleteCol});
+            var row;
 			templateTable.observe('click', function(e){
 				if(e.findElement('img') && e.findElement('img').hasClassName('enableRow')){
-					var row = e.findElement('tr');
+					row = e.findElement('tr');
 					if(row.getAttribute('enabled') && row.getAttribute('enabled') == "true"){
 						row.select('input', 'textarea', 'select').invoke('disable');
 						row.setAttribute('enabled', 'false');
@@ -244,12 +245,11 @@ Class.create("SQLEditor", {
 					}
 					Event.stop(e);
 				}else if(e.findElement('img') && e.findElement('img').hasClassName('deleteRow')){
-					var row = e.findElement('tr');
+					row = e.findElement('tr');
 					var origName = '';
 					row.select('input').each(function(input){
 						if(input.name.search('field_origname') > -1){
 							origName = input.value;
-							return;
 						}
 					});
 					if(origName != ''){
@@ -283,7 +283,7 @@ Class.create("SQLEditor", {
 			rows.each(function(row){
 				if(row.getAttribute('enabled')=='false') row.remove();
 			});
-			ajaxplorer.actionBar.submitForm(this.oForm);
+			PydioApi.getClient().submitForm(this.oForm);
 			hideLightBox();
 			return false;			
 		}.bind(this);
@@ -298,7 +298,7 @@ Class.create("SQLEditor", {
 		parameters.set('current_table', currentTable);
 		var connexion = new Connexion();
 		connexion.setParameters(parameters);		
-		connexion.onComplete = function(transport){ajaxplorer.actionBar.parseXmlMessage(transport.responseXML);};
+		connexion.onComplete = function(transport){PydioApi.getClient().parseXmlMessage(transport.responseXML);};
 		connexion.sendAsync();
 		hideLightBox();
 	},
@@ -316,18 +316,16 @@ Class.create("SQLEditor", {
 		});		
 		var connexion = new Connexion();
 		connexion.setParameters(params);		
-		connexion.onComplete = function(transport){ajaxplorer.actionBar.parseXmlMessage(transport.responseXML);};
+		connexion.onComplete = function(transport){PydioApi.getClient().parseXmlMessage(transport.responseXML);};
 		connexion.sendAsync();
 		hideLightBox();		
 	},
 	
 	createFieldSet:function(legend, content){
-		var fSet = new Element('fieldset').insert(new Element('legend').update(legend)).insert(content);
-		return fSet;		
+        return new Element('fieldset').insert(new Element('legend').update(legend)).insert(content);
 	},
 	
 	parseXml : function(transport){
-		//alert(transport.responseText);
 		this.changeModifiedStatus(false);
 		this.removeOnLoad();
 	},

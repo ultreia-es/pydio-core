@@ -105,7 +105,7 @@ class smb
                 }
             }
         }
-        AJXP_Logger::debug($str, $array);
+        AJXP_Logger::debug(__CLASS__,__FUNCTION__,$str, $array);
     }
 
 
@@ -249,7 +249,7 @@ class smb
                         $i = ($mode == 'servers') ? array ($name, "server") : array ($name, "workgroup", $master);
                         break;
                     case 'files':
-                        list ($attr, $name) = preg_match ("/^(.*)[ ]+([D|A|H|S|R]+)$/", trim ($regs[1]), $regs2)
+                        list ($attr, $name) = preg_match ("/^(.*)[ ]+([D|A|H|S|R|N]+)$/", trim ($regs[1]), $regs2)
                             ? array (trim ($regs2[2]), trim ($regs2[1]))
                             : array ('', trim ($regs[1]));
                         list ($his, $im) = array (
@@ -412,11 +412,11 @@ class smb
 
     public static function cleanUrl($url)
     {
-        $url = str_replace("smb://", "smb:/__/__", $url);
+        $url = str_replace("smbclient://", "smbclient:/__/__", $url);
         while (strstr($url, "//")!==FALSE) {
             $url = str_replace("//", "/", $url);
         }
-        $url = str_replace("smb:/__/__", "smb://", $url);
+        $url = str_replace("smbclient:/__/__", "smbclient://", $url);
         return $url;
     }
 
@@ -450,7 +450,10 @@ class smb
             trigger_error('rename(): error in URL', E_USER_ERROR);
         }
         smb::clearstatcache ($url_from);
-        return smb::execute ('rename "'.$from['path'].'" "'.$to['path'].'"', $to);
+        $res = smb::execute ('rename "'.$from['path'].'" "'.$to['path'].'"', $to);
+        if(empty($res)) return true;
+        AJXP_Logger::info(__CLASS__, "SmbClient rename error: ".$res);
+        return false;
     }
 
     public function mkdir ($url, $mode, $options)
@@ -478,8 +481,8 @@ class smb
     {
         $pass = $_SESSION["AJXP_SESSION_REMOTE_PASS"];
         //$pass = $pass["password"];
-        $pu['scheme'] = 'smb';
-        $temp = substr($url, 6);
+        $pu['scheme'] = 'smbclient';
+        $temp = substr($url, 12);
         //echo $temp . "\n";
         $pu['user'] = "";
         if (strstr($temp, ":") !== false) {
@@ -642,6 +645,7 @@ class smb_stream_wrapper extends smb
             case 'r+':
             case 'rb':
             case 'a':
+            case 'ab':
             case 'a+':
                 // REFERENCE STREAM BUT DO NOT OPEN IT UNTIL READING IS REALLY NECESSARY!
                 /*
@@ -768,5 +772,5 @@ function ConvSmbParameterToWinOs($params)
 # Register 'smb' protocol !
 ###################################################################
 
-stream_wrapper_register('smb', 'smb_stream_wrapper')
+stream_wrapper_register('smbclient', 'smb_stream_wrapper')
     or die ('Failed to register protocol');

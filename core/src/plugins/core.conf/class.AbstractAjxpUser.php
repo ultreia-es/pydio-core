@@ -39,8 +39,34 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
     public $prefs;
     public $bookmarks;
     public $version;
+    /**
+     * @var string
+     */
     public $parentUser;
+    /**
+     * @var bool
+     */
     public $resolveAsParent = false;
+    /**
+     * @var bool
+     */
+    private $hidden;
+
+    /**
+     * @param bool $hidden
+     */
+    public function setHidden($hidden)
+    {
+        $this->hidden = $hidden;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isHidden()
+    {
+        return $this->hidden;
+    }
 
     public $groupPath = "/";
     /**
@@ -65,7 +91,7 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
      */
     public $storage;
 
-    public function AbstractAjxpUser($id, $storage=null)
+    public function __construct($id, $storage=null)
     {
         $this->id = $id;
         if ($storage == null) {
@@ -144,6 +170,16 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
         }
         if(!isSet($this->rights["ajxp.roles"])) $this->rights["ajxp.roles"] = array();
         $this->rights["ajxp.roles"][$roleObject->getId()] = true;
+        if(!isSet($this->rights["ajxp.roles.order"])){
+            $this->rights["ajxp.roles.order"] = array();
+        }
+        $this->rights["ajxp.roles.order"][$roleObject->getId()] = count($this->rights["ajxp.roles"]);
+        if($roleObject->alwaysOverrides()){
+            if(!isSet($this->rights["ajxp.roles.sticky"])){
+                $this->rights["ajxp.roles.sticky"] = array();
+            }
+            $this->rights["ajxp.roles.sticky"][$roleObject->getId()] = true;
+        }
         uksort($this->rights["ajxp.roles"], array($this, "orderRoles"));
         $this->roles[$roleObject->getId()] = $roleObject;
         $this->recomputeMergedRole();
@@ -153,10 +189,38 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
     {
         if (isSet($this->rights["ajxp.roles"]) && isSet($this->rights["ajxp.roles"][$roleId])) {
             unset($this->rights["ajxp.roles"][$roleId]);
-            uksort($this->rights["ajxp.roles"], array($this, "orderRoles"));
             if(isSet($this->roles[$roleId])) unset($this->roles[$roleId]);
+            if(isSet($this->rights["ajxp.roles.sticky"]) && isSet($this->rights["ajxp.roles.sticky"][$roleId])){
+                unset($this->rights["ajxp.roles.sticky"][$roleId]);
+            }
+            if(isset($this->rights["ajxp.roles.order"]) && isset($this->rights["ajxp.roles.order"][$roleId])){
+                $previousPos = $this->rights["ajxp.roles.order"][$roleId];
+                $ordered = array_flip($this->rights["ajxp.roles.order"]);
+                ksort($ordered);
+                unset($ordered[$previousPos]);
+                $reordered = array();
+                $p = 0;
+                foreach($ordered as $id) {
+                    $reordered[$id] = $p;
+                    $p++;
+                }
+                $this->rights["ajxp.roles.order"] = $reordered;
+            }
+            uksort($this->rights["ajxp.roles"], array($this, "orderRoles"));
         }
         $this->recomputeMergedRole();
+    }
+
+    /**
+     * @param $orderedRolesIds Ordered array of roles ids
+     */
+    public function updateRolesOrder($orderedRolesIds){
+        // check content
+        $saveRoleOrders = array();
+        foreach($orderedRolesIds as $position => $rId){
+            if(isSet($this->rights["ajxp.roles"][$rId])) $saveRoleOrders[$rId] = $position;
+        }
+        $this->rights["ajxp.roles.order"] = $saveRoleOrders;
     }
 
     public function getRoles()
@@ -187,20 +251,27 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
 
     public function setLock($lockAction)
     {
-        $this->rights["ajxp.lock"] = $lockAction;
+        //$this->rights["ajxp.lock"] = $lockAction;
+        $this->personalRole->setParameterValue('core.conf', 'USER_LOCK_ACTION', $lockAction);
+        $this->recomputeMergedRole();
     }
 
     public function removeLock()
     {
-        $this->rights["ajxp.lock"] = false;
+        if(isSet($this->rights['ajxp.lock'])){
+            $this->rights["ajxp.lock"] = false;
+        }
+        $this->personalRole->setParameterValue('core.conf', 'USER_LOCK_ACTION', AJXP_VALUE_CLEAR);
+        $this->recomputeMergedRole();
     }
 
     public function getLock()
     {
+        if(AJXP_SERVER_DEBUG && $this->isAdmin() && $this->getGroupPath() == "/") return false;
         if (!empty($this->rights["ajxp.lock"])) {
             return $this->rights["ajxp.lock"];
         }
-        return false;
+        return $this->mergedRole->filterParameterValue('core.conf', 'USER_LOCK_ACTION', AJXP_REPO_SCOPE_ALL, false);
     }
 
     public function isAdmin()
@@ -213,16 +284,25 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
         $this->hasAdmin = $boolean;
     }
 
+    /**
+     * @return bool Whether the user has a parent or not
+     */
     public function hasParent()
     {
         return isSet($this->parentUser);
     }
 
+    /**
+     * @param string $user A user ID
+     */
     public function setParent($user)
     {
         $this->parentUser = $user;
     }
 
+    /**
+     * @return string Returns the ID of the parent user
+     */
     public function getParent()
     {
         return $this->parentUser;
@@ -230,13 +310,13 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
 
     public function canRead($rootDirId)
     {
-        if(!empty($this->rights["ajxp.lock"])) return false;
+        if($this->getLock() != false) return false;
         return $this->mergedRole->canRead($rootDirId);
     }
 
     public function canWrite($rootDirId)
     {
-        if(!empty($this->rights["ajxp.lock"])) return false;
+        if($this->getLock() != false) return false;
         return $this->mergedRole->canWrite($rootDirId);
     }
 
@@ -250,7 +330,7 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
     {
         $repositoryObject = ConfService::getRepositoryById($repositoryId);
         if($repositoryObject == null) return false;
-        return ConfService::repositoryIsAccessible($repositoryId, $repositoryObject, $this, false, false);
+        return ConfService::repositoryIsAccessible($repositoryId, $repositoryObject, $this, false, true);
         /*
         if($repositoryObject->getAccessType() == "ajxp_conf" && !$this->isAdmin()) return false;
         if($repositoryObject->getUniqueUser() && $this->id != $repositoryObject->getUniqueUser()) return false;
@@ -352,21 +432,17 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
 
     abstract public function load();
 
-    abstract public function save($context = "superuser");
+    public function save($context = "superuser"){
+        $kvCache = ConfService::getInstance()->getKeyValueCache();
+        $this->_save($context);
+        $kvCache->save("pydio:user:".$this->getId(), $this);
+    }
+
+    abstract protected function _save($context = "superuser");
 
     abstract public function getTemporaryData($key);
 
     abstract public function saveTemporaryData($key, $value);
-
-    /** Decode a user supplied password before using it */
-    public function decodeUserPassword($password)
-    {
-        if (function_exists('mcrypt_decrypt')) {
-             // We have encoded as base64 so if we need to store the result in a database, it can be stored in text column
-             $password = trim(mcrypt_decrypt(MCRYPT_RIJNDAEL_256, md5($this->getId()."\1CDAFx¨op#"), base64_decode($password), MCRYPT_MODE_ECB), "\0");
-        }
-        return $password;
-    }
 
     public function setGroupPath($groupPath, $update = false)
     {
@@ -386,7 +462,8 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
             throw new Exception("Empty role, this is not normal");
         }
         uksort($this->roles, array($this, "orderRoles"));
-        $this->mergedRole =  $this->roles[array_shift(array_keys($this->roles))];
+        $keys = array_keys($this->roles);
+        $this->mergedRole =  clone $this->roles[array_shift($keys)];
         if (count($this->roles) > 1) {
             $this->parentRole = $this->mergedRole;
         }
@@ -404,10 +481,14 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
             //... but we want the parent user's role, filtered with inheritable properties only.
             $stretchedParentUserRole = AuthService::limitedRoleFromParent($this->parentUser);
             if ($stretchedParentUserRole !== null) {
-                $this->parentRole = $this->parentRole->override($stretchedParentUserRole);
+                $this->parentRole = $stretchedParentUserRole->override($this->parentRole);  //$this->parentRole->override($stretchedParentUserRole);
+                // REAPPLY SPECIFIC "SHARED" ROLES
+                foreach ($this->roles as $role) {
+                    if(! $role->autoAppliesTo("shared")) continue;
+                    $this->parentRole = $role->override($this->parentRole);
+                }
             }
-
-            $this->mergedRole = $this->parentRole->override($this->personalRole);
+            $this->mergedRole = $this->personalRole->override($this->parentRole);  // $this->parentRole->override($this->personalRole);
         }
     }
 
@@ -459,9 +540,36 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
 
     protected function orderRoles($r1, $r2)
     {
+        // One group and something else
+        if(strpos($r1, "AJXP_GRP_") === 0 && strpos($r2, "AJXP_GRP_") === FALSE) return -1;
+        if(strpos($r2, "AJXP_GRP_") === 0 && strpos($r1, "AJXP_GRP_") === FALSE) return 1;
+
+        // Usr role and something else
         if(strpos($r1, "AJXP_USR_") === 0) return 1;
         if(strpos($r2, "AJXP_USR_") === 0) return -1;
-        return strcmp($r1,$r2);
+
+        // Two groups, sort by string, will magically keep group hierarchy
+        if(strpos($r1, "AJXP_GRP_") === 0 && strpos($r2, "AJXP_GRP_") === 000) {
+            return strcmp($r1,$r2);
+        }
+
+        // Two roles: if sticky and something else, always last.
+        if(isSet($this->rights["ajxp.roles.sticky"])){
+            $sticky = $this->rights["ajxp.roles.sticky"];
+            if(isSet($sticky[$r1]) && !isSet($sticky[$r2])){
+                return 1;
+            }
+            if(isSet($sticky[$r2]) && !isSet($sticky[$r1])){
+                return -1;
+            }
+        }
+
+        // Two roles - Try to get sorting order
+        if(isSet($this->rights["ajxp.roles.order"])){
+            return $this->rights["ajxp.roles.order"][$r1] - $this->rights["ajxp.roles.order"][$r2];
+        }else{
+            return strcmp($r1,$r2);
+        }
     }
 
     public function setResolveAsParent($resolveAsParent)
@@ -476,17 +584,48 @@ abstract class AbstractAjxpUser implements AjxpGroupPathProvider
 
     /**
      * @param array $roles
+     * @param boolean $checkBoolean
      * @return array
      */
-    protected function filterRolesForSaving($roles)
+    protected function filterRolesForSaving($roles, $checkBoolean)
     {
         $res = array();
         foreach ($roles as $rName => $status) {
-            if(!$status) continue;
+            if($checkBoolean &&  !$status) continue;
             if(strpos($rName, "AJXP_GRP_/") === 0) continue;
-            $res[$rName] = true;
+            $res[$rName] = $status;
         }
         return $res;
+    }
+
+    protected $lastSessionSerialization = 0;
+
+    public function __sleep(){
+        $this->lastSessionSerialization = time();
+        return array("id", "hasAdmin", "rights", "prefs", "bookmarks", "version", "roles", "parentUser", "resolveAsParent", "hidden", "groupPath", "personalRole", "lastSessionSerialization");
+    }
+
+    public function __wakeup(){
+        $this->storage = ConfService::getConfStorageImpl();
+        if(!is_object($this->personalRole)){
+            $this->personalRole = AuthService::getRole("AJXP_USR_/".$this->getId());
+        }
+        $this->recomputeMergedRole();
+    }
+
+    public function reloadRolesIfRequired(){
+        if($this->lastSessionSerialization && count($this->roles)
+            && $this->storage->rolesLastUpdated(array_keys($this->roles)) > $this->lastSessionSerialization){
+
+            $newRoles = AuthService::getRolesList(array_keys($this->roles));
+            foreach($newRoles as $rId => $newRole){
+                $this->roles[$rId] = $newRoles[$rId];
+            }
+            $this->recomputeMergedRole();
+            return true;
+
+        }
+        return false;
     }
 
 }

@@ -1,6 +1,7 @@
 <?php
 
 $mess = array(
-"1" => "Sair da Geolocalização",
+"1" => "Geolocalização",
 "2" => "Localizar",
+    "3" => "Meta Data (EXIF)",
 );

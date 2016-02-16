@@ -11,7 +11,7 @@
         <actions>
             <action name="toggle_watch">
                 <gui src="meta.watch/ICON_SIZE/watch.png" text="meta.watch.1" title="meta.watch.2" iconClass="icon-rss">
-                    <context dir="true" recycle="false" selection="true" actionBar="true" actionBarGroup="more" contextMenu="true"/>
+                    <context dir="true" recycle="hidden" selection="true" actionBar="true" actionBarGroup="more" contextMenu="true"/>
                     <selectionContext dir="true" file="true" recycle="false" unique="true"/>
                 </gui>
                 <rightsContext adminOnly="false" noUser="false" read="false" userLogged="only" write="false"/>
@@ -61,7 +61,7 @@
                             });
                             context.builderMenuItems.push({
                                 name:MessageHash['meta.watch.3'],
-                                alt:MessageHash['meta.watch.4'],
+                                alt:MessageHash["meta.watch." + (n.isLeaf()?"8":"4")],
                                 isDefault : false,
                                 image:resolveImageSource('meta.watch/ICON_SIZE/watch.png', '',  22),
                                 callback:function(e){
@@ -86,14 +86,18 @@
                                 file : node.getPath()
                             });
                             conn.onComplete = function(transport){
-                                ajaxplorer.actionBar.parseXmlMessage(transport.responseXML);
+                                PydioApi.getClient().parseXmlMessage(transport.responseXML);
                             };
                             window.metaWatchCmd = null;
                             conn.sendAsync();
                         }
 
                             ]]></clientCallback>
-                    <serverCallback methodName="switchActions"/>
+                    <serverCallback methodName="switchActions" restParams="/file+" developerComment="Set or unset a monitor watch on the selected node">
+                        <input_param name="file" type="path" description="Path to the node to wath/unwatch"/>
+                        <input_param name="watch_action" type="string"
+                                     description="watch_change|watch_read|watch_both|watch_stop"/>
+                    </serverCallback>
                 </processing>
             </action>
         </actions>

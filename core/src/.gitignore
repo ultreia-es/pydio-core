@@ -1,4 +1,4 @@
-.idea/*
+.idea/
 data/cache/*
 data/files/*
 data/logs/*
@@ -7,3 +7,8 @@ data/plugins/*
 data/public/*
 data/tmp
 *.kdev4
+node_modules/
+.DS_Store
+.jshintignore
+.jshintrc
+.validate.json

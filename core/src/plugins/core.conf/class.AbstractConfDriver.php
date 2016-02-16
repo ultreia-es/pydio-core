@@ -40,7 +40,7 @@ abstract class AbstractConfDriver extends AJXP_Plugin
         // BACKWARD COMPATIBILIY PREVIOUS CONFIG VIA OPTIONS
         if (isSet($options["CUSTOM_DATA"])) {
             $custom = $options["CUSTOM_DATA"];
-            $serverSettings = $this->xPath->query('//server_settings')->item(0);
+            $serverSettings = $this->getXPath()->query('//server_settings')->item(0);
             foreach ($custom as $key => $value) {
                 $n = $this->manifestDoc->createElement("param");
                 $n->setAttribute("name", $key);
@@ -61,9 +61,9 @@ abstract class AbstractConfDriver extends AJXP_Plugin
         parent::parseSpecificContributions($contribNode);
         if ($contribNode->nodeName == 'client_configs' && !ConfService::getCoreConf("WEBDAV_ENABLE")) {
             $actionXpath=new DOMXPath($contribNode->ownerDocument);
-            $webdavCompNodeList = $actionXpath->query('component_config[@className="AjxpTabulator::userdashboard_parameters_tab"]', $contribNode);
+            $webdavCompNodeList = $actionXpath->query('component_config/additional_tab[@id="webdav_pane"]', $contribNode);
             if ($webdavCompNodeList->length) {
-                $contribNode->removeChild($webdavCompNodeList->item(0));
+                $contribNode->removeChild($webdavCompNodeList->item(0)->parentNode);
             }
         }
 
@@ -71,9 +71,25 @@ abstract class AbstractConfDriver extends AJXP_Plugin
 
         // WEBDAV ACTION
         if (!ConfService::getCoreConf("WEBDAV_ENABLE")) {
-            unset($this->actions["webdav_preferences"]);
             $actionXpath=new DOMXPath($contribNode->ownerDocument);
             $publicUrlNodeList = $actionXpath->query('action[@name="webdav_preferences"]', $contribNode);
+            if ($publicUrlNodeList->length) {
+                $publicUrlNode = $publicUrlNodeList->item(0);
+                $contribNode->removeChild($publicUrlNode);
+            }
+        }
+
+        // SWITCH TO DASHBOARD ACTION
+        $u = AuthService::getLoggedUser();
+        $access = true;
+        if($u == null) $access = false;
+        else {
+            $acl = $u->mergedRole->getAcl("ajxp_user");
+            if(empty($acl)) $access = false;
+        }
+        if(!$access){
+            $actionXpath=new DOMXPath($contribNode->ownerDocument);
+            $publicUrlNodeList = $actionXpath->query('action[@name="switch_to_user_dashboard"]', $contribNode);
             if ($publicUrlNodeList->length) {
                 $publicUrlNode = $publicUrlNodeList->item(0);
                 $contribNode->removeChild($publicUrlNode);
@@ -96,7 +112,6 @@ abstract class AbstractConfDriver extends AJXP_Plugin
 
 
         if (!$hasExposed) {
-            unset($this->actions["custom_data_edit"]);
             $actionXpath=new DOMXPath($contribNode->ownerDocument);
             $publicUrlNodeList = $actionXpath->query('action[@name="custom_data_edit"]', $contribNode);
             $publicUrlNode = $publicUrlNodeList->item(0);
@@ -105,14 +120,12 @@ abstract class AbstractConfDriver extends AJXP_Plugin
 
         // CREATE A NEW REPOSITORY
         if (!ConfService::getCoreConf("USER_CREATE_REPOSITORY", "conf")) {
-            unset($this->actions["user_create_repository"]);
             $actionXpath=new DOMXPath($contribNode->ownerDocument);
             $publicUrlNodeList = $actionXpath->query('action[@name="user_create_repository"]', $contribNode);
             if ($publicUrlNodeList->length) {
                 $publicUrlNode = $publicUrlNodeList->item(0);
                 $contribNode->removeChild($publicUrlNode);
             }
-            unset($this->actions["user_delete_repository"]);
             $actionXpath=new DOMXPath($contribNode->ownerDocument);
             $publicUrlNodeList = $actionXpath->query('action[@name="user_delete_repository"]', $contribNode);
             if ($publicUrlNodeList->length) {
@@ -123,14 +136,18 @@ abstract class AbstractConfDriver extends AJXP_Plugin
 
         // CREATE A NEW USER
         if (!ConfService::getCoreConf("USER_CREATE_USERS", "conf")) {
-            unset($this->actions["user_create_user"]);
             $actionXpath=new DOMXPath($contribNode->ownerDocument);
             $publicUrlNodeList = $actionXpath->query('action[@name="user_create_user"]', $contribNode);
             if ($publicUrlNodeList->length) {
                 $publicUrlNode = $publicUrlNodeList->item(0);
                 $contribNode->removeChild($publicUrlNode);
             }
-            unset($this->actions["user_delete_user"]);
+            $actionXpath=new DOMXPath($contribNode->ownerDocument);
+            $publicUrlNodeList = $actionXpath->query('action[@name="user_update_user"]', $contribNode);
+            if ($publicUrlNodeList->length) {
+                $publicUrlNode = $publicUrlNodeList->item(0);
+                $contribNode->removeChild($publicUrlNode);
+            }
             $actionXpath=new DOMXPath($contribNode->ownerDocument);
             $publicUrlNodeList = $actionXpath->query('action[@name="user_delete_user"]', $contribNode);
             if ($publicUrlNodeList->length) {
@@ -214,9 +231,24 @@ abstract class AbstractConfDriver extends AJXP_Plugin
     /**
      * Returns a list of available repositories (dynamic ones only, not the ones defined in the config file).
      * @param AbstractAjxpUser $user
-     * @return Array
+     * @return Repository[]
      */
     abstract public function listRepositories($user = null);
+
+    /**
+     * Returns a list of available repositories (dynamic ones only, not the ones defined in the config file).
+     * @param Array $criteria This parameter can take the following keys
+     *      - Search keys "uuid", "parent_uuid", "owner_user_id", "display", "accessType", "isTemplate", "slug", "groupPath",
+     *        Search values can be either string, array of string, AJXP_FILTER_EMPTY, AJXP_FILTER_NOT_EMPTY or regexp:RegexpString
+     *      - or "role" => AJXP_Role object: will search repositories accessible to this role
+     *      - ORDERBY = array("KEY"=>"", "DIR"=>""), GROUPBY, CURSOR = array("OFFSET" => 0, "LIMIT", 30)
+     *      - COUNT_ONLY
+     * @param $count int fill this integer with a count
+     * @return Repository[]
+     */
+    abstract public function listRepositoriesWithCriteria($criteria, &$count=null);
+
+
     /**
      * Retrieve a Repository given its unique ID.
      *
@@ -258,9 +290,10 @@ abstract class AbstractConfDriver extends AJXP_Plugin
     /**
      * @abstract
      * @param AJXP_Role $role
+     * @param AbstractAjxpUser $userObject
      * @return void
      */
-    abstract public function updateRole($role);
+    abstract public function updateRole($role, $userObject = null);
 
     /**
      * @abstract
@@ -268,6 +301,16 @@ abstract class AbstractConfDriver extends AJXP_Plugin
      * @return void
      */
     abstract public function deleteRole($role);
+
+    /**
+     * Compute the most recent date where one of these roles where updated.
+     *
+     * @param $rolesIdsList
+     * @return int
+     */
+    public function rolesLastUpdated($rolesIdsList){
+        return 0;
+    }
 
     /**
      * Specific queries
@@ -342,6 +385,15 @@ abstract class AbstractConfDriver extends AJXP_Plugin
      */
     public function createUserObject($userId)
     {
+        $kvCache = ConfService::getInstance()->getKeyValueCache();
+        $test = $kvCache->fetch("pydio:user:".$userId);
+        if($test !== false && is_a($test, "AbstractAjxpUser")){
+            if($test->personalRole == null){
+                $test->personalRole = $test->roles["AJXP_USR_/".$userId];
+            }
+            $test->recomputeMergedRole();
+            return $test;
+        }
         $userId = AuthService::filterUserSensitivity($userId);
         $abstractUser = $this->instantiateAbstractUserImpl($userId);
         if (!$abstractUser->storageExists()) {
@@ -349,6 +401,9 @@ abstract class AbstractConfDriver extends AJXP_Plugin
         }
         AuthService::updateAutoApplyRole($abstractUser);
         AuthService::updateAuthProvidedData($abstractUser);
+        $args = array(&$abstractUser);
+        AJXP_Controller::applyIncludeHook("include.user.updateUserObject", $args);
+        $kvCache->save("pydio:user:".$userId, $abstractUser);
         return $abstractUser;
     }
 
@@ -381,9 +436,26 @@ abstract class AbstractConfDriver extends AJXP_Plugin
     /**
      * @abstract
      * @param string $repositoryId
-     * @return array()
+     * @return AbstractAjxpUser[]
      */
     abstract public function getUsersForRepository($repositoryId);
+
+    /**
+     * @abstract
+     * @param string $repositoryId
+     * @param string $rolePrefix
+     * @param bool $countOnly
+     * @return AJXP_Role[]
+     */
+    abstract public function getRolesForRepository($repositoryId, $rolePrefix = '', $countOnly = false);
+    /**
+     * @abstract
+     * @param string $repositoryId
+     * @param boolean $details
+     * @param boolean $admin
+     * @return Integer|Array
+     */
+    abstract public function countUsersForRepository($repositoryId, $details = false, $admin = false);
 
 
     /**
@@ -393,6 +465,13 @@ abstract class AbstractConfDriver extends AJXP_Plugin
      * @return void
      */
     abstract public function filterUsersByGroup(&$flatUsersList, $baseGroup = "/", $fullTree = false);
+
+    /**
+     * Check if group already exists
+     * @param string $groupPath
+     * @return boolean
+     */
+    abstract public function groupExists($groupPath);
 
     /**
      * @param string $groupPath
@@ -407,7 +486,6 @@ abstract class AbstractConfDriver extends AJXP_Plugin
      * @return void
      */
     abstract public function deleteGroup($groupPath);
-
 
     /**
      * @abstract
@@ -435,15 +513,16 @@ abstract class AbstractConfDriver extends AJXP_Plugin
      */
     public function getExposedPreferences($userObject)
     {
-        $stringPrefs = array("display","lang","diapo_autofit","sidebar_splitter_size","vertical_splitter_size","history/last_repository","pending_folder","thumb_size","plugins_preferences","upload_auto_send","upload_auto_close","upload_existing","action_bar_style");
-        $jsonPrefs = array("ls_history","columns_size", "columns_visibility", "gui_preferences");
+        $stringPrefs = array("lang","history/last_repository","pending_folder","plugins_preferences");
+        $jsonPrefs = array("ls_history","gui_preferences");
         $prefs = array();
         if ( $userObject->getId()=="guest" && ConfService::getCoreConf("SAVE_GUEST_PREFERENCES", "conf") === false) {
             return array();
         }
         if ( ConfService::getCoreConf("SKIP_USER_HISTORY", "conf") === true ) {
-            $stringPrefs = array_diff($stringPrefs, array("history/last_repository"));
-            $jsonPrefs = array("columns_size", "columns_visibility", "gui_preferences");
+            $stringPrefs = array("lang","pending_folder", "plugins_preferences");
+            $jsonPrefs = array("gui_preferences");
+            $prefs["SKIP_USER_HISTORY"] = array("value" => "true", "type" => "string" );
         }
         foreach ($stringPrefs as $pref) {
             if (strstr($pref, "/")!==false) {
@@ -459,20 +538,28 @@ abstract class AbstractConfDriver extends AJXP_Plugin
             $prefs[$pref] = array("value" => $userObject->getPref($pref), "type" => "json" );
         }
 
-        $paramNodes = AJXP_PluginsService::searchAllManifests("//server_settings/param[contains(@scope,'user') and @expose='true']", "node", false, false, true);
-        if (is_array($paramNodes) && count($paramNodes)) {
-            foreach ($paramNodes as $xmlNode) {
-                if ($xmlNode->getAttribute("expose") == "true") {
-                    $parentNode = $xmlNode->parentNode->parentNode;
-                    $pluginId = $parentNode->getAttribute("id");
-                    if (empty($pluginId)) {
-                        $pluginId = $parentNode->nodeName.".".$parentNode->getAttribute("name");
-                    }
-                    $name = $xmlNode->getAttribute("name");
-                    $value = $userObject->mergedRole->filterParameterValue($pluginId, $name, AJXP_REPO_SCOPE_ALL, "");
-                    $prefs[$name] = array("value" => $value, "type" => "string", "pluginId" => $pluginId);
+
+        $exposed = array();
+        $cacheHasExposed = AJXP_PluginsService::getInstance()->loadFromPluginQueriesCache("//server_settings/param[contains(@scope,'user') and @expose='true']");
+        if ($cacheHasExposed !== null && is_array($cacheHasExposed)) {
+            $exposed = $cacheHasExposed;
+        } else {
+            $exposed_props = AJXP_PluginsService::searchAllManifests("//server_settings/param[contains(@scope,'user') and @expose='true']", "node", false, false, true);
+            foreach($exposed_props as $exposed_prop){
+                $parentNode = $exposed_prop->parentNode->parentNode;
+                $pluginId = $parentNode->getAttribute("id");
+                if (empty($pluginId)) {
+                    $pluginId = $parentNode->nodeName.".".$parentNode->getAttribute("name");
                 }
+                $paramName = $exposed_prop->getAttribute("name");
+                $exposed[] = array("PLUGIN_ID" => $pluginId, "NAME" => $paramName);
             }
+            AJXP_PluginsService::getInstance()->storeToPluginQueriesCache("//server_settings/param[contains(@scope,'user') and @expose='true']", $exposed);
+        }
+
+        foreach ($exposed as $exposedProp) {
+            $value = $userObject->mergedRole->filterParameterValue($exposedProp["PLUGIN_ID"], $exposedProp["NAME"], AJXP_REPO_SCOPE_ALL, "");
+            $prefs[$exposedProp["NAME"]] = array("value" => $value, "type" => "string", "pluginId" => $exposedProp["PLUGIN_ID"]);
         }
 
         return $prefs;
@@ -480,7 +567,6 @@ abstract class AbstractConfDriver extends AJXP_Plugin
 
     public function switchAction($action, $httpVars, $fileVars)
     {
-        if(!isSet($this->actions[$action])) return;
         $xmlBuffer = "";
         foreach ($httpVars as $getName=>$getValue) {
             $$getName = AJXP_Utils::securePath($getValue);
@@ -515,6 +601,58 @@ abstract class AbstractConfDriver extends AJXP_Plugin
                 }
                 //$logMessage = "Successfully Switched!";
                 $this->logInfo("Switch Repository", array("rep. id"=>$repository_id));
+
+            break;
+
+            //------------------------------------
+            //	SEND XML REGISTRY
+            //------------------------------------
+            case "get_xml_registry" :
+            case "state" :
+
+                $clone = ConfService::getFilteredXMLRegistry(true, true);
+                $clonePath = new DOMXPath($clone);
+                $serverCallbacks = $clonePath->query("//serverCallback|hooks");
+                foreach ($serverCallbacks as $callback) {
+                    $callback->parentNode->removeChild($callback);
+                }
+                $xPath = '';
+                if (isSet($httpVars["xPath"])) {
+                    $xPath = ltrim(AJXP_Utils::securePath($httpVars["xPath"]), "/");
+                }
+                if (!empty($xPath)) {
+                    $nodes = $clonePath->query($xPath);
+                    if($httpVars["format"] == "json"){
+                        $data = AJXP_XMLWriter::xmlToArray($nodes->item(0));
+                        HTMLWriter::charsetHeader("application/json");
+                        echo json_encode($data);
+                    }else{
+                        AJXP_XMLWriter::header("ajxp_registry_part", array("xPath"=>$xPath));
+                        if ($nodes->length) {
+                            print(AJXP_XMLWriter::replaceAjxpXmlKeywords($clone->saveXML($nodes->item(0))));
+                        }
+                        AJXP_XMLWriter::close("ajxp_registry_part");
+                    }
+                } else {
+                    AJXP_Utils::safeIniSet("zlib.output_compression", "4096");
+                    if($httpVars["format"] == "json"){
+                        $data = AJXP_XMLWriter::xmlToArray($clone);
+                        HTMLWriter::charsetHeader("application/json");
+                        echo json_encode($data);
+                    }else{
+                        header('Content-Type: application/xml; charset=UTF-8');
+                        $string = AJXP_XMLWriter::replaceAjxpXmlKeywords($clone->saveXML());
+                        $etag = md5($string);
+                        $match = isSet($_SERVER["HTTP_IF_NONE_MATCH"])?$_SERVER["HTTP_IF_NONE_MATCH"]:'';
+                        if($match == $etag){
+                            header('HTTP/1.1 304 Not Modified');
+                        }else{
+                            header('Cache-Control:public, max-age=31536000');
+                            header('ETag: '.$etag);
+                            print($string);
+                        }
+                    }
+                }
 
             break;
 
@@ -562,7 +700,10 @@ abstract class AbstractConfDriver extends AJXP_Plugin
                         $title = AJXP_Utils::decodeSecureMagic($httpVars["bm_title"]);
                         $bmUser->renameBookmark($bmPath, $title);
                     }
-                    AJXP_Controller::applyHook("msg.instant", array("<reload_bookmarks/>", ConfService::getRepository()->getId()));
+                    AJXP_Controller::applyHook("msg.instant", array("<reload_bookmarks/>",
+                            ConfService::getRepository()->getId(),
+                            AuthService::getLoggedUser()->getId())
+                    );
 
                     if (AuthService::usersEnabled() && AuthService::getLoggedUser() != null) {
                         $bmUser->save("user");
@@ -611,15 +752,19 @@ abstract class AbstractConfDriver extends AJXP_Plugin
 
                 $data = array();
 
-                if ($action == "user_create_user") {
+                if ($action == "user_create_user" && isSet($httpVars["NEW_new_user_id"])) {
+                    $updating = false;
                     AJXP_Utils::parseStandardFormParameters($httpVars, $data, null, "NEW_");
+                    $original_id = AJXP_Utils::decodeSecureMagic($data["new_user_id"]);
                     $data["new_user_id"] = AJXP_Utils::decodeSecureMagic($data["new_user_id"], AJXP_SANITIZE_EMAILCHARS);
-                    if (AuthService::userExists($data["new_user_id"])) {
-                        throw new Exception('Please choose another user id');
+                    if($original_id != $data["new_user_id"]){
+                        throw new Exception(str_replace("%s", $data["new_user_id"], $mess["ajxp_conf.127"]));
                     }
-                    AJXP_Controller::applyHook("user.before_create", array($data["new_user_id"]));
+                    if (AuthService::userExists($data["new_user_id"],"w")) {
+                        throw new Exception($mess["ajxp_conf.43"]);
+                    }
                     $loggedUser = AuthService::getLoggedUser();
-                    $limit = $loggedUser->personalRole->filterParameterValue("core.conf", "USER_SHARED_USERS_LIMIT", AJXP_REPO_SCOPE_ALL, "");
+                    $limit = $loggedUser->mergedRole->filterParameterValue("core.conf", "USER_SHARED_USERS_LIMIT", AJXP_REPO_SCOPE_ALL, "");
                     if (!empty($limit) && intval($limit) > 0) {
                         $count = count($this->getUserChildren($loggedUser->getId()));
                         if ($count >= $limit) {
@@ -635,7 +780,24 @@ abstract class AbstractConfDriver extends AJXP_Plugin
                     $userObject->setGroupPath($loggedUser->getGroupPath());
                     $userObject->setProfile("shared");
 
+                } else if($action == "user_create_user" && isSet($httpVars["NEW_existing_user_id"])){
+
+                    $updating = true;
+                    AJXP_Utils::parseStandardFormParameters($httpVars, $data, null, "NEW_");
+                    $userId = $data["existing_user_id"];
+                    if(!AuthService::userExists($userId)){
+                        throw new Exception("Cannot find user");
+                    }
+                    $userObject = ConfService::getConfStorageImpl()->createUserObject($userId);
+                    if($userObject->getParent() != AuthService::getLoggedUser()->getId()){
+                        throw new Exception("Cannot find user");
+                    }
+                    if(!empty($data["new_password"])){
+                        AuthService::updatePassword($userId, $data["new_password"]);
+                    }
+
                 } else {
+                    $updating = false;
                     $userObject = AuthService::getLoggedUser();
                     AJXP_Utils::parseStandardFormParameters($httpVars, $data, null, "PREFERENCES_");
                 }
@@ -652,7 +814,10 @@ abstract class AbstractConfDriver extends AJXP_Plugin
                             }
                             $name = $xmlNode->getAttribute("name");
                             if (isSet($data[$name]) || $data[$name] === "") {
-                                if ($data[$name] === "" || $userObject->parentRole == null || $userObject->parentRole->filterParameterValue($pluginId, $name, AJXP_REPO_SCOPE_ALL, "") != $data[$name]) {
+                                if($data[$name] == "__AJXP_VALUE_SET__") continue;
+                                if ($data[$name] === "" || $userObject->parentRole == null
+                                    || $userObject->parentRole->filterParameterValue($pluginId, $name, AJXP_REPO_SCOPE_ALL, "") != $data[$name]
+                                    || $userObject->personalRole->filterParameterValue($pluginId, $name, AJXP_REPO_SCOPE_ALL, "") != $data[$name]) {
                                     $userObject->personalRole->setParameterValue($pluginId, $name, $data[$name]);
                                     $rChanges = true;
                                 }
@@ -669,7 +834,8 @@ abstract class AbstractConfDriver extends AJXP_Plugin
                 }
 
                 if ($action == "user_create_user") {
-                    AJXP_Controller::applyHook("user.after_create", array($userObject));
+
+                    AJXP_Controller::applyHook($updating?"user.after_update":"user.after_create", array($userObject));
                     if (isset($data["send_email"]) && $data["send_email"] == true && !empty($data["email"])) {
                         $mailer = AJXP_PluginsService::getInstance()->getUniqueActivePluginForType("mailer");
                         if ($mailer !== false) {
@@ -691,6 +857,29 @@ abstract class AbstractConfDriver extends AJXP_Plugin
 
             break;
 
+            case "user_update_user":
+
+                if(!isSet($httpVars["user_id"])) {
+                    throw new Exception("invalid arguments");
+                }
+                $userId = $httpVars["user_id"];
+                if(!AuthService::userExists($userId)){
+                    throw new Exception("Cannot find user");
+                }
+                $userObject = ConfService::getConfStorageImpl()->createUserObject($userId);
+                if($userObject->getParent() != AuthService::getLoggedUser()->getId()){
+                    throw new Exception("Cannot find user");
+                }
+                $paramsString = ConfService::getCoreConf("NEWUSERS_EDIT_PARAMETERS", "conf");
+                $result = array();
+                $params = explode(",", $paramsString);
+                foreach($params as $p){
+                    $result[$p] = $userObject->personalRole->filterParameterValue("core.conf", $p, AJXP_REPO_SCOPE_ALL, "");
+                }
+                HTMLWriter::charsetHeader("application/json");
+                echo json_encode($result);
+
+            break;
 
             //------------------------------------
             // WEBDAV PREFERENCES
@@ -722,7 +911,7 @@ abstract class AbstractConfDriver extends AJXP_Plugin
                         $password = $httpVars["webdav_pass"];
                         if (function_exists('mcrypt_encrypt')) {
                             $user = $userObject->getId();
-                            $secret = (defined("AJXP_SECRET_KEY")? AJXP_SAFE_SECRET_KEY:"\1CDAFx¨op#");
+                            $secret = (defined("AJXP_SAFE_SECRET_KEY")? AJXP_SAFE_SECRET_KEY:"\1CDAFx¨op#");
                             $password = base64_encode(mcrypt_encrypt(MCRYPT_RIJNDAEL_256,  md5($user.$secret), $password, MCRYPT_MODE_ECB));
                         }
                         $davData["PASS"] = $password;
@@ -787,7 +976,10 @@ abstract class AbstractConfDriver extends AJXP_Plugin
             case  "get_user_templates_definition":
 
                 AJXP_XMLWriter::header("repository_templates");
-                $repositories = ConfService::getRepositoriesList("all");
+                $count = 0;
+                $repositories = ConfService::listRepositoriesWithCriteria(array(
+                    "isTemplate" => 1
+                ), $count);
                 $pServ = AJXP_PluginsService::getInstance();
                 foreach ($repositories as $repo) {
                     if(!$repo->isTemplate) continue;
@@ -903,8 +1095,13 @@ abstract class AbstractConfDriver extends AJXP_Plugin
                 $crtValue = $httpVars["value"];
                 $usersOnly = isSet($httpVars["users_only"]) && $httpVars["users_only"] == "true";
                 $existingOnly = isSet($httpVars["existing_only"]) && $httpVars["existing_only"] == "true";
-                if(!empty($crtValue)) $regexp = '^'.preg_quote($crtValue);
+                if(!empty($crtValue)) $regexp = '^'.$crtValue;
                 else $regexp = null;
+                $skipDisplayWithoutRegexp = ConfService::getCoreConf("USERS_LIST_REGEXP_MANDATORY", "conf");
+                if($skipDisplayWithoutRegexp && $regexp == null){
+                    print("<ul></ul>");
+                    break;
+                }
                 $limit = intval(ConfService::getCoreConf("USERS_LIST_COMPLETE_LIMIT", "conf"));
                 $searchAll = ConfService::getCoreConf("CROSSUSERS_ALLGROUPS", "conf");
                 $displayAll = ConfService::getCoreConf("CROSSUSERS_ALLGROUPS_DISPLAY", "conf");
@@ -914,44 +1111,104 @@ abstract class AbstractConfDriver extends AJXP_Plugin
                 }
                 AuthService::setGroupFiltering(false);
                 $allUsers = AuthService::listUsers($baseGroup, $regexp, 0, $limit, false);
+
                 if (!$usersOnly) {
-                    $allGroups = AuthService::listChildrenGroups($baseGroup);
+                    $allGroups = array();
+
+                    $roleOrGroup = ConfService::getCoreConf("GROUP_OR_ROLE", "conf");
+                    $rolePrefix = $excludeString = $includeString = null;
+                    if(!is_array($roleOrGroup)){
+                        $roleOrGroup = array("group_switch_value" => $roleOrGroup);
+                    }
+
+                    $listRoleType = false;
+
+                    if(isSet($roleOrGroup["PREFIX"])){
+                        $rolePrefix    = $loggedUser->mergedRole->filterParameterValue("core.conf", "PREFIX", null, $roleOrGroup["PREFIX"]);
+                        $excludeString = $loggedUser->mergedRole->filterParameterValue("core.conf", "EXCLUDED", null, $roleOrGroup["EXCLUDED"]);
+                        $includeString = $loggedUser->mergedRole->filterParameterValue("core.conf", "INCLUDED", null, $roleOrGroup["INCLUDED"]);
+                        $listUserRolesOnly = $loggedUser->mergedRole->filterParameterValue("core.conf", "LIST_ROLE_BY", null, $roleOrGroup["LIST_ROLE_BY"]);
+                        if (is_array($listUserRolesOnly) && isset($listUserRolesOnly["group_switch_value"])) {
+                            switch ($listUserRolesOnly["group_switch_value"]) {
+                                case "userroles":
+                                    $listRoleType = true;
+                                    break;
+                                case "allroles":
+                                    $listRoleType = false;
+                                    break;
+                                default;
+                                    break;
+                            }
+                        }
+                    }
+
+                    switch (strtolower($roleOrGroup["group_switch_value"])) {
+                        case 'user':
+                            // donothing
+                            break;
+                        case 'group':
+                            $authGroups = AuthService::listChildrenGroups($baseGroup);
+                            foreach ($authGroups as $gId => $gName) {
+                                $allGroups["AJXP_GRP_" . rtrim($baseGroup, "/")."/".ltrim($gId, "/")] = $gName;
+                            }
+                            break;
+                        case 'role':
+                            $allGroups = $this->getUserRoleList($loggedUser, $rolePrefix, $includeString, $excludeString, $listRoleType);
+                            break;
+                        case 'rolegroup';
+                            $groups = array();
+                            $authGroups = AuthService::listChildrenGroups($baseGroup);
+                            foreach ($authGroups as $gId => $gName) {
+                                $groups["AJXP_GRP_" . rtrim($baseGroup, "/")."/".ltrim($gId, "/")] = $gName;
+                            }
+                            $roles = $this->getUserRoleList($loggedUser, $rolePrefix, $includeString, $excludeString, $listRoleType);
+
+                            empty($groups) ? $allGroups = $roles : (empty($roles) ? $allGroups = $groups : $allGroups = array_merge($groups, $roles));
+                            //$allGroups = array_merge($groups, $roles);
+                            break;
+                        default;
+                            break;
+                    }
                 }
+
+
                 $users = "";
                 $index = 0;
-                if ($regexp != null && (!count($allUsers) /*|| !array_key_exists($crtValue, $allUsers)*/)  && ConfService::getCoreConf("USER_CREATE_USERS", "conf") && !$existingOnly) {
+                if ($regexp != null && (!count($allUsers) || (!empty($crtValue) && !array_key_exists(strtolower($crtValue), $allUsers)))  && ConfService::getCoreConf("USER_CREATE_USERS", "conf") && !$existingOnly) {
                     $users .= "<li class='complete_user_entry_temp' data-temporary='true' data-label='$crtValue'><span class='user_entry_label'>$crtValue (".$mess["448"].")</span></li>";
                 } else if ($existingOnly && !empty($crtValue)) {
                     $users .= "<li class='complete_user_entry_temp' data-temporary='true' data-label='$crtValue' data-entry_id='$crtValue'><span class='user_entry_label'>$crtValue</span></li>";
                 }
                 $mess = ConfService::getMessages();
                 if ($regexp == null && !$usersOnly) {
-                    $users .= "<li class='complete_group_entry' data-group='/' data-label='".$mess["447"]."'><span class='user_entry_label'>".$mess["447"]."</span></li>";
+                    $users .= "<li class='complete_group_entry' data-group='AJXP_GRP_/' data-label=\"".$mess["447"]."\"><span class='user_entry_label'>".$mess["447"]."</span></li>";
                 }
-                if (!$usersOnly) {
+                $indexGroup = 0;
+                if (!$usersOnly && isset($allGroups) && is_array($allGroups)) {
                     foreach ($allGroups as $groupId => $groupLabel) {
                         if ($regexp == null ||  preg_match("/$regexp/i", $groupLabel)) {
-                            $users .= "<li class='complete_group_entry' data-group='$groupId' data-label='$groupLabel' data-entry_id='$groupId'><span class='user_entry_label'>".$groupLabel."</span></li>";
+                            $users .= "<li class='complete_group_entry' data-group='$groupId' data-label=\"$groupLabel\" data-entry_id='$groupId'><span class='user_entry_label'>".$groupLabel."</span></li>";
+                            $indexGroup++;
                         }
+                        if($indexGroup == $limit) break;
                     }
                 }
                 if ($regexp == null && method_exists($this, "listUserTeams")) {
                     $teams = $this->listUserTeams();
                     foreach ($teams as $tId => $tData) {
-                        $users.= "<li class='complete_group_entry' data-group='/AJXP_TEAM/$tId' data-label='[team] ".$tData["LABEL"]."'><span class='user_entry_label'>[team] ".$tData["LABEL"]."</span></li>";
+                        $users.= "<li class='complete_group_entry' data-group='/AJXP_TEAM/$tId' data-label=\"[team] ".$tData["LABEL"]."\"><span class='user_entry_label'>[team] ".$tData["LABEL"]."</span></li>";
                     }
                 }
                 foreach ($allUsers as $userId => $userObject) {
                     if($userObject->getId() == $loggedUser->getId()) continue;
                     if ( ( !$userObject->hasParent() &&  ConfService::getCoreConf("ALLOW_CROSSUSERS_SHARING", "conf")) || $userObject->getParent() == $loggedUser->getId() ) {
-                        $userLabel = $userObject->personalRole->filterParameterValue("core.conf", "USER_DISPLAY_NAME", AJXP_REPO_SCOPE_ALL, $userId);
-                        if($regexp != null && ! (preg_match("/$regexp/i", $userId) || preg_match("/$regexp/i", $userLabel)) ) continue;
-                        if(empty($userLabel)) $userLabel = $userId;
+                        $userLabel = ConfService::getUserPersonalParameter("USER_DISPLAY_NAME", $userObject, "core.conf", $userId);
+                        //if($regexp != null && ! (preg_match("/$regexp/i", $userId) || preg_match("/$regexp/i", $userLabel)) ) continue;
                         $userDisplay = ($userLabel == $userId ? $userId : $userLabel . " ($userId)");
                         if (ConfService::getCoreConf("USERS_LIST_HIDE_LOGIN", "conf") == true && $userLabel != $userId) {
                             $userDisplay = $userLabel;
                         }
-                        $users .= "<li class='complete_user_entry' data-label='$userLabel' data-entry_id='$userId'><span class='user_entry_label'>".$userDisplay."</span></li>";
+                        $users .= "<li class='complete_user_entry' data-label=\"$userLabel\" data-entry_id='$userId'><span class='user_entry_label'>".$userDisplay."</span></li>";
                         $index ++;
                     }
                     if($index == $limit) break;
@@ -963,26 +1220,48 @@ abstract class AbstractConfDriver extends AJXP_Plugin
 
                 break;
 
+            case "load_repository_info":
+
+                $data = array();
+                $repo = ConfService::getRepository();
+                if($repo != null){
+                    $users = AuthService::countUsersForRepository(ConfService::getRepository()->getId(), true);
+                    $data["core.users"] = $users;
+                    if(isSet($httpVars["collect"]) && $httpVars["collect"] == "true"){
+                        AJXP_Controller::applyHook("repository.load_info", array(&$data));
+                    }
+                }
+                HTMLWriter::charsetHeader("application/json");
+                echo json_encode($data);
+
+                break;
+
             case "get_binary_param" :
 
                 if (isSet($httpVars["tmp_file"])) {
                     $file = AJXP_Utils::getAjxpTmpDir()."/".AJXP_Utils::securePath($httpVars["tmp_file"]);
                     if (isSet($file)) {
+                        session_write_close();
                         header("Content-Type:image/png");
                         readfile($file);
                     }
                 } else if (isSet($httpVars["binary_id"])) {
-                    if (isSet($httpVars["user_id"]) && AuthService::getLoggedUser() != null && AuthService::getLoggedUser()->isAdmin()) {
-                        $context = array("USER" => $httpVars["user_id"]);
-                    } else {
+                    if (isSet($httpVars["user_id"]) && AuthService::getLoggedUser() != null
+                        && ( AuthService::getLoggedUser()->getId() == $httpVars["user_id"] || AuthService::getLoggedUser()->isAdmin() )) {
+                        $context = array("USER" => AJXP_Utils::sanitize($httpVars["user_id"], AJXP_SANITIZE_EMAILCHARS));
+                    } else if(AuthService::getLoggedUser() !== null) {
                         $context = array("USER" => AuthService::getLoggedUser()->getId());
+                    } else {
+                        $context = array();
                     }
-                    $this->loadBinary($context, $httpVars["binary_id"]);
+                    session_write_close();
+                    $this->loadBinary($context, AJXP_Utils::sanitize($httpVars["binary_id"], AJXP_SANITIZE_ALPHANUM));
                 }
             break;
 
             case "get_global_binary_param" :
 
+                session_write_close();
                 if (isSet($httpVars["tmp_file"])) {
                     $file = AJXP_Utils::getAjxpTmpDir()."/".AJXP_Utils::securePath($httpVars["tmp_file"]);
                     if (isSet($file)) {
@@ -990,7 +1269,7 @@ abstract class AbstractConfDriver extends AJXP_Plugin
                         readfile($file);
                     }
                 } else if (isSet($httpVars["binary_id"])) {
-                    $this->loadBinary(array(), $httpVars["binary_id"]);
+                    $this->loadBinary(array(), AJXP_Utils::sanitize($httpVars["binary_id"], AJXP_SANITIZE_ALPHANUM));
                 }
             break;
 
@@ -1015,8 +1294,6 @@ abstract class AbstractConfDriver extends AJXP_Plugin
                 }
 
                 break;
-
-
             default;
             break;
         }
@@ -1031,4 +1308,90 @@ abstract class AbstractConfDriver extends AJXP_Plugin
         return $xmlBuffer;
     }
 
+    /**
+     * @param AbstractAjxpUser $userObject
+     * @param string $rolePrefix get all roles with prefix
+     * @param string $includeString get roles in this string
+     * @param string $excludeString eliminate roles in this string
+     * @param bool $byUserRoles
+     * @return array
+     */
+    public function getUserRoleList($userObject, $rolePrefix, $includeString, $excludeString, $byUserRoles = false)
+    {
+        if (!$userObject){
+            return array();
+        }
+        if ($byUserRoles) {
+            $allUserRoles = $userObject->getRoles();
+        } else {
+            $allUserRoles = AuthService::getRolesList(array(), true);
+        }
+        $allRoles = array();
+        if (isset($allUserRoles)) {
+
+            // Exclude
+            if ($excludeString) {
+                if (strpos($excludeString, "preg:") !== false) {
+                    $matchFilterExclude = "/" . str_replace("preg:", "", $excludeString) . "/i";
+                } else {
+                    $valueFiltersExclude = array_map("trim", explode(",", $excludeString));
+                    $valueFiltersExclude = array_map("strtolower", $valueFiltersExclude);
+                }
+            }
+
+            // Include
+            if ($includeString) {
+                if (strpos($includeString, "preg:") !== false) {
+                    $matchFilterInclude = "/" . str_replace("preg:", "", $includeString) . "/i";
+                } else {
+                    $valueFiltersInclude = array_map("trim", explode(",", $includeString));
+                    $valueFiltersInclude = array_map("strtolower", $valueFiltersInclude);
+                }
+            }
+
+            foreach ($allUserRoles as $roleId => $role) {
+                if (!empty($rolePrefix) && strpos($roleId, $rolePrefix) === false) continue;
+                if (isSet($matchFilterExclude) && preg_match($matchFilterExclude, substr($roleId, strlen($rolePrefix)))) continue;
+                if (isSet($valueFiltersExclude) && in_array(strtolower(substr($roleId, strlen($rolePrefix))), $valueFiltersExclude)) continue;
+                if (isSet($matchFilterInclude) && !preg_match($matchFilterInclude, substr($roleId, strlen($rolePrefix)))) continue;
+                if (isSet($valueFiltersInclude) && !in_array(strtolower(substr($roleId, strlen($rolePrefix))), $valueFiltersInclude)) continue;
+                if(is_a($role, "AJXP_Role")) $roleObject = $role;
+                else $roleObject = AuthService::getRole($roleId);
+                $label = $roleObject->getLabel();
+                $label = !empty($label) ? $label : substr($roleId, strlen($rolePrefix));
+                $allRoles[$roleId] = $label;
+            }
+        }
+        return $allRoles;
+    }
+
+    /**
+     * @param string $actionName
+     * @param array $httpVars
+     * @param array $fileVars
+     */
+    public function publishPermissionsMask($actionName, $httpVars, $fileVars){
+        $mask = array();
+        HTMLWriter::charsetHeader("application/json");
+        if(!AuthService::usersEnabled() || AuthService::getLoggedUser() == null){
+            print json_encode($mask);
+            return;
+        }
+        $repoId = ConfService::getCurrentRepositoryId();
+        $role = AuthService::getLoggedUser()->mergedRole;
+        if($role->hasMask($repoId)){
+            $fullMask = $role->getMask($repoId);
+            foreach($fullMask->flattenTree() as $path => $permission){
+                // Do not show if "deny".
+                if($permission->denies()) continue;
+                $mask[$path] = array(
+                    "read" => $permission->canRead(),
+                    "write" => $permission->canWrite()
+                );
+            }
+        }
+        print json_encode($mask);
+        return;
+
+    }
 }

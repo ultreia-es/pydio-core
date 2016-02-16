@@ -59,7 +59,7 @@ abstract class AbstractLogDriver extends AJXP_Plugin
      * @param String $message The message to log
      *
      */
-    public function write2($level, $ip, $user, $source, $prefix, $message)
+    public function write2($level, $ip, $user, $source, $prefix, $message, $nodePathes = array())
     {
         //for backward compatibility
         $this->write($source."\t".$prefix."\t".$message, $level);
@@ -72,10 +72,7 @@ abstract class AbstractLogDriver extends AJXP_Plugin
      * @param null $year
      * @param null $month
      * @param string $rootPath
-     * @return void
-     * @internal param $String [optional] $nodeName
-     * @internal param $String [optional] $year
-     * @internal param $String [optional] $month
+     * @return String[]
      */
     abstract public function xmlListLogFiles($nodeName="file", $year=null, $month=null, $rootPath = "/logs", $print = true);
 
@@ -87,7 +84,6 @@ abstract class AbstractLogDriver extends AJXP_Plugin
      * @param string $nodeName
      * @param string $rootPath
      * @return void
-     * @internal param $String [optional] $nodeName
      */
     abstract public function xmlLogs($parentDir, $date, $nodeName = "log", $rootPath = "/logs");
 

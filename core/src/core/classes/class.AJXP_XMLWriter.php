@@ -85,7 +85,7 @@ class AJXP_XMLWriter
      * @param integer $currentPage
      * @param integer $totalPages
      * @param integer $dirsCount
-     * @return void
+     * @param null $remoteSortAttributes
      */
     public static function renderPaginationData($count, $currentPage, $totalPages, $dirsCount = -1, $remoteSortAttributes = null)
     {
@@ -96,6 +96,31 @@ class AJXP_XMLWriter
         $string = '<pagination count="'.$count.'" total="'.$totalPages.'" current="'.$currentPage.'" overflowMessage="'.$currentPage."/".$totalPages.'" icon="folder.png" openicon="folder_open.png" dirsCount="'.$dirsCount.'"'.$remoteSortString.'/>';
         AJXP_XMLWriter::write($string, true);
     }
+
+    /**
+     * Convert an arbitrary list of data (array of associative array) as standard XML list.
+     * @param $data
+     * @param $rootPath
+     * @param $idKey
+     * @param $labelKey
+     */
+    public static function renderSimpleListAsNodes($data, $rootPath, $idKey, $labelKey){
+
+        self::header();
+
+        foreach($data as $item){
+
+            $nodeName = rtrim($rootPath, "/")."/".$item[$idKey];
+            $nodeLabel = $item[$labelKey];
+            $isLeaf = true;
+            $metaData = $item;
+            self::renderNode($nodeName, $nodeLabel, $isLeaf, $metaData);
+
+        }
+
+        self::close();
+    }
+
     /**
      * Prints out the XML headers and preamble, then an open node
      * @static
@@ -143,12 +168,17 @@ class AJXP_XMLWriter
     {
         $string = "<tree";
         $metaData["filename"] = $nodeName;
+        if(AJXP_Utils::detectXSS($nodeName)) $metaData["filename"] = "/XSS Detected - Please contact your admin";
         if (!isSet($metaData["text"])) {
+            if(AJXP_Utils::detectXSS($nodeLabel)) $nodeLabel = "XSS Detected - Please contact your admin";
             $metaData["text"] = $nodeLabel;
+        }else{
+            if(AJXP_Utils::detectXSS($metaData["text"])) $metaData["text"] = "XSS Detected - Please contact your admin";
         }
         $metaData["is_file"] = ($isLeaf?"true":"false");
 
         foreach ($metaData as $key => $value) {
+            if(AJXP_Utils::detectXSS($value)) $value = "XSS Detected!";
             $value = AJXP_Utils::xmlEntities($value, true);
             $string .= " $key=\"$value\"";
         }
@@ -188,6 +218,7 @@ class AJXP_XMLWriter
     {
         self::renderNode($array[0],$array[1],$array[2],$array[3]);
     }
+
     /**
      * Error Catcher for PHP errors. Depending on the SERVER_DEBUG config
      * shows the file/line info or not.
@@ -197,7 +228,6 @@ class AJXP_XMLWriter
      * @param $fichier
      * @param $ligne
      * @param $context
-     * @return
      */
     public static function catchError($code, $message, $fichier, $ligne, $context)
     {
@@ -205,7 +235,6 @@ class AJXP_XMLWriter
             return ;
         }
         AJXP_Logger::error(basename($fichier), "error l.$ligne", array("message" => $message));
-        $loggedUser = AuthService::getLoggedUser();
         if (ConfService::getConf("SERVER_DEBUG")) {
             $stack = debug_backtrace();
             $stackLen = count($stack);
@@ -229,7 +258,11 @@ class AJXP_XMLWriter
             }
         }
         if(!headers_sent()) AJXP_XMLWriter::header();
-        AJXP_XMLWriter::sendMessage(null, SystemTextEncoding::toUTF8($message), true);
+        if(!empty($context) && is_object($context) && is_a($context, "AJXP_PromptException")){
+            AJXP_XMLWriter::write("<prompt type=\"".$context->getPromptType()."\"><message>".$message."</message><data><![CDATA[".json_encode($context->getPromptData())."]]></data></prompt>", true);
+        }else{
+            AJXP_XMLWriter::sendMessage(null, SystemTextEncoding::toUTF8($message), true);
+        }
         AJXP_XMLWriter::close();
         exit(1);
     }
@@ -241,7 +274,7 @@ class AJXP_XMLWriter
     public static function catchException($exception)
     {
         try {
-            AJXP_XMLWriter::catchError($exception->getCode(), SystemTextEncoding::fromUTF8($exception->getMessage()), $exception->getFile(), $exception->getLine(), null);
+            AJXP_XMLWriter::catchError($exception->getCode(), SystemTextEncoding::fromUTF8($exception->getMessage()), $exception->getFile(), $exception->getLine(), $exception);
         } catch (Exception $innerEx) {
             error_log(get_class($innerEx)." thrown within the exception handler!");
             error_log("Original exception was: ".$innerEx->getMessage()." in ".$innerEx->getFile()." on line ".$innerEx->getLine());
@@ -296,7 +329,7 @@ class AJXP_XMLWriter
                 if (array_key_exists($messId, $confMessages)) {
                     $message = $confMessages[$messId];
                 }
-                $xml = str_replace("CONF_MESSAGE[$messId]", $message, $xml);
+                $xml = str_replace("CONF_MESSAGE[$messId]", AJXP_Utils::xmlEntities($message), $xml);
             }
         }
         if (preg_match_all("/MIXIN_MESSAGE(\[.*?\])/", $xml, $matches, PREG_SET_ORDER)) {
@@ -306,7 +339,7 @@ class AJXP_XMLWriter
                 if (array_key_exists($messId, $confMessages)) {
                     $message = $confMessages[$messId];
                 }
-                $xml = str_replace("MIXIN_MESSAGE[$messId]", $message, $xml);
+                $xml = str_replace("MIXIN_MESSAGE[$messId]", AJXP_Utils::xmlEntities($message), $xml);
             }
         }
         if ($stripSpaces) {
@@ -337,13 +370,15 @@ class AJXP_XMLWriter
     /**
      * Send a <reload> XML instruction for refreshing the list
      * @static
-     * @param string $nodePath
-     * @param string $pendingSelection
+     * @param $diffNodes
      * @param bool $print
      * @return string
      */
     public static function writeNodesDiff($diffNodes, $print = false)
     {
+        /**
+         * @var $ajxpNode AJXP_Node
+         */
         $mess = ConfService::getMessages();
         $buffer = "<nodes_diff>";
         if (isSet($diffNodes["REMOVE"]) && count($diffNodes["REMOVE"])) {
@@ -448,6 +483,7 @@ class AJXP_XMLWriter
      */
     public static function writeBookmarks($allBookmarks, $print = true, $format = "legacy")
     {
+        $driver = false;
         if ($format == "node_list") {
             $driver = ConfService::loadRepositoryDriver();
             if (!is_a($driver, "AjxpWrapperProvider")) {
@@ -475,8 +511,12 @@ class AJXP_XMLWriter
                 $buffer .= "<bookmark path=\"".AJXP_Utils::xmlEntities($path, true)."\" title=\"".AJXP_Utils::xmlEntities($title, true)."\"/>";
             }
         }
-        if($print) print $buffer;
-        else return $buffer;
+        if($print) {
+            print $buffer;
+            return null;
+        } else {
+            return $buffer;
+        }
     }
     /**
      * Utilitary for generating a <component_config> tag for the FilesList component
@@ -500,8 +540,6 @@ class AJXP_XMLWriter
      */
     public static function sendMessage($logMessage, $errorMessage, $print = true)
     {
-        $messageType = "";
-        $message = "";
         if ($errorMessage == null) {
             $messageType = "SUCCESS";
             $message = AJXP_Utils::xmlContentEntities($logMessage);
@@ -511,25 +549,14 @@ class AJXP_XMLWriter
         }
         return AJXP_XMLWriter::write("<message type=\"$messageType\">".$message."</message>", $print);
     }
-    /**
-     * Writes the user data as XML
-     * @static
-     * @param null $userObject
-     * @param bool $details
-     * @return void
-     */
-    public static function sendUserData($userObject = null, $details=false)
-    {
-        print(AJXP_XMLWriter::getUserXML($userObject, $details));
-    }
+
     /**
      * Extract all the user data and put it in XML
      * @static
-     * @param null $userObject
-     * @param bool $details
+     * @param null $userObject * @internal param bool $details
      * @return string
      */
-    public static function getUserXML($userObject = null, $details=false)
+    public static function getUserXML($userObject = null)
     {
         $buffer = "";
         $loggedUser = AuthService::getLoggedUser();
@@ -537,24 +564,14 @@ class AJXP_XMLWriter
         if($userObject != null) $loggedUser = $userObject;
         if (!AuthService::usersEnabled()) {
             $buffer.="<user id=\"shared\">";
-            if (!$details) {
-                $buffer.="<active_repo id=\"".ConfService::getCurrentRepositoryId()."\" write=\"1\" read=\"1\"/>";
-            }
-            $buffer.= AJXP_XMLWriter::writeRepositoriesData(null, $details);
+            $buffer.="<active_repo id=\"".ConfService::getCurrentRepositoryId()."\" write=\"1\" read=\"1\"/>";
+            $buffer.= AJXP_XMLWriter::writeRepositoriesData(null);
             $buffer.="</user>";
         } else if ($loggedUser != null) {
             $lock = $loggedUser->getLock();
             $buffer.="<user id=\"".$loggedUser->id."\">";
-            if (!$details) {
-                $buffer.="<active_repo id=\"".ConfService::getCurrentRepositoryId()."\" write=\"".($loggedUser->canWrite(ConfService::getCurrentRepositoryId())?"1":"0")."\" read=\"".($loggedUser->canRead(ConfService::getCurrentRepositoryId())?"1":"0")."\"/>";
-            } else {
-                $buffer .= "<ajxp_roles>";
-                foreach ($loggedUser->getRoles() as $roleId => $boolean) {
-                    if($boolean === true) $buffer.= "<role id=\"$roleId\"/>";
-                }
-                $buffer .= "</ajxp_roles>";
-            }
-            $buffer.= AJXP_XMLWriter::writeRepositoriesData($loggedUser, $details);
+            $buffer.="<active_repo id=\"".ConfService::getCurrentRepositoryId()."\" write=\"".($loggedUser->canWrite(ConfService::getCurrentRepositoryId())?"1":"0")."\" read=\"".($loggedUser->canRead(ConfService::getCurrentRepositoryId())?"1":"0")."\"/>";
+            $buffer.= AJXP_XMLWriter::writeRepositoriesData($loggedUser);
             $buffer.="<preferences>";
             $preferences = $confDriver->getExposedPreferences($loggedUser);
             foreach ($preferences as $prefName => $prefData) {
@@ -577,35 +594,46 @@ class AJXP_XMLWriter
             }
             $buffer.="</preferences>";
             $buffer.="<special_rights is_admin=\"".($loggedUser->isAdmin()?"1":"0")."\"  ".($lock!==false?"lock=\"$lock\"":"")."/>";
+            /*
             $bMarks = $loggedUser->getBookmarks();
             if (count($bMarks)) {
                 $buffer.= "<bookmarks>".AJXP_XMLWriter::writeBookmarks($bMarks, false)."</bookmarks>";
             }
+            */
             $buffer.="</user>";
         }
         return $buffer;
     }
+
     /**
      * Write the repositories access rights in XML format
      * @static
-     * @param AbstractAjxpUser|null $loggedUser
-     * @param bool $details
+     * @param AbstractAjxpUser|null $loggedUser * @internal param bool $details
      * @return string
      */
-    public static function writeRepositoriesData($loggedUser, $details=false)
+    public static function writeRepositoriesData($loggedUser)
     {
         $st = "<repositories>";
         $streams = ConfService::detectRepositoryStreams(false);
-        foreach (ConfService::getAccessibleRepositories($loggedUser, $details, false) as $repoId => $repoObject) {
-            $toLast = false;
-            if ($repoObject->getAccessType()=="ajxp_conf") {
-                if(AuthService::usersEnabled() && !$loggedUser->isAdmin())continue;
-                $toLast = true;
+
+        $exposed = array();
+        $cacheHasExposed = AJXP_PluginsService::getInstance()->loadFromPluginQueriesCache("//server_settings/param[contains(@scope,'repository') and @expose='true']");
+        if ($cacheHasExposed !== null && is_array($cacheHasExposed)) {
+            $exposed = $cacheHasExposed;
+        } else {
+            $exposed_props = AJXP_PluginsService::searchAllManifests("//server_settings/param[contains(@scope,'repository') and @expose='true']", "node", false, false, true);
+            foreach($exposed_props as $exposed_prop){
+                $pluginId = $exposed_prop->parentNode->parentNode->getAttribute("id");
+                $paramName = $exposed_prop->getAttribute("name");
+                $paramDefault = $exposed_prop->getAttribute("default");
+                $exposed[] = array("PLUGIN_ID" => $pluginId, "NAME" => $paramName, "DEFAULT" => $paramDefault);
             }
+            AJXP_PluginsService::getInstance()->storeToPluginQueriesCache("//server_settings/param[contains(@scope,'repository') and @expose='true']", $exposed);
+        }
+
+        $accessible = ConfService::getAccessibleRepositories($loggedUser, false, false);
+        foreach ($accessible as $repoId => $repoObject) {
             $rightString = "";
-            if ($details) {
-                $rightString = " r=\"".($loggedUser->canRead($repoId)?"1":"0")."\" w=\"".($loggedUser->canWrite($repoId)?"1":"0")."\"";
-            }
             $streamString = "";
             if (in_array($repoObject->accessType, $streams)) {
                 $streamString = "allowCrossRepositoryCopy=\"true\"";
@@ -621,27 +649,44 @@ class AJXP_XMLWriter
             $isSharedString = "";
             if ($repoObject->hasOwner()) {
                 $uId = $repoObject->getOwner();
-                $uObject = ConfService::getConfStorageImpl()->createUserObject($uId);
-                $label = $uObject->personalRole->filterParameterValue("core.conf", "USER_DISPLAY_NAME", AJXP_REPO_SCOPE_ALL, $uId);
-                if(empty($label)) $label = $uId;
+                $label = ConfService::getUserPersonalParameter("USER_DISPLAY_NAME", $uId, "core.conf", $uId);
                 $isSharedString =  'owner="'.AJXP_Utils::xmlEntities($label).'"';
             }
             $descTag = "";
-            $description = $repoObject->getDescription();
+            $public = false;
+            if(!empty($_SESSION["CURRENT_MINISITE"])) $public = true;
+            $description = $repoObject->getDescription($public);
             if (!empty($description)) {
                 $descTag = '<description>'.AJXP_Utils::xmlEntities($description, true).'</description>';
             }
-            $xmlString = "<repo access_type=\"".$repoObject->accessType."\" id=\"".$repoId."\"$rightString $streamString $slugString $isSharedString><label>".SystemTextEncoding::toUTF8(AJXP_Utils::xmlEntities($repoObject->getDisplay()))."</label>".$descTag.$repoObject->getClientSettings()."</repo>";
-            if ($toLast) {
-                $lastString = $xmlString;
-            } else {
-                $st .= $xmlString;
+            $roleString="";
+            if($loggedUser != null){
+                $merged = $loggedUser->mergedRole;
+                $params = array();
+                foreach($exposed as $exposed_prop){
+                    $metaOptions = $repoObject->getOption("META_SOURCES");
+                    if(!isSet($metaOptions[$exposed_prop["PLUGIN_ID"]])){
+                        continue;
+                    }
+                    $value = $exposed_prop["DEFAULT"];
+                    if(isSet($metaOptions[$exposed_prop["PLUGIN_ID"]][$exposed_prop["NAME"]])){
+                        $value = $metaOptions[$exposed_prop["PLUGIN_ID"]][$exposed_prop["NAME"]];
+                    }
+                    $value = $merged->filterParameterValue($exposed_prop["PLUGIN_ID"], $exposed_prop["NAME"], $repoId, $value);
+                    if($value !== null){
+                        if($value === true  || $value === false) $value = ($value === true ?"true":"false");
+                        $params[] = '<repository_plugin_param plugin_id="'.$exposed_prop["PLUGIN_ID"].'" name="'.$exposed_prop["NAME"].'" value="'.AJXP_Utils::xmlEntities($value).'"/>';
+                        $roleString .= str_replace(".", "_",$exposed_prop["PLUGIN_ID"])."_".$exposed_prop["NAME"].'="'.AJXP_Utils::xmlEntities($value).'" ';
+                    }
+                }
+                $roleString.='acl="'.$merged->getAcl($repoId).'"';
+                if($merged->hasMask($repoId)){
+                    $roleString.= ' hasMask="true" ';
+                }
             }
+            $st .= "<repo access_type=\"".$repoObject->accessType."\" id=\"".$repoId."\"$rightString $streamString $slugString $isSharedString $roleString><label>".SystemTextEncoding::toUTF8(AJXP_Utils::xmlEntities($repoObject->getDisplay()))."</label>".$descTag.$repoObject->getClientSettings()."</repo>";
         }
 
-        if (isSet($lastString)) {
-            $st.= $lastString;
-        }
         $st .= "</repositories>";
         return $st;
     }
@@ -664,6 +709,99 @@ class AJXP_XMLWriter
             $remString .= " secure_token=\"$secureToken\"";
         }
         print("<logging_result value=\"$result\"$remString/>");
+    }
+
+    /**
+     * Create plain PHP associative array from XML.
+     *
+     * Example usage:
+     *   $xmlNode = simplexml_load_file('example.xml');
+     *   $arrayData = xmlToArray($xmlNode);
+     *   echo json_encode($arrayData);
+     *
+     * @param \DOMNode $domXml The dom node to load
+     * @param array $options Associative array of options
+     * @return array
+     * @link http://outlandishideas.co.uk/blog/2012/08/xml-to-json/ More info
+     * @author Tamlyn Rhodes <http://tamlyn.org>
+     * @license http://creativecommons.org/publicdomain/mark/1.0/ Public Domain
+     */
+    public static function xmlToArray($domXml, $options = array()) {
+        $xml = simplexml_import_dom($domXml);
+        $defaults = array(
+            'namespaceSeparator' => ':',//you may want this to be something other than a colon
+            'attributePrefix' => '@',   //to distinguish between attributes and nodes with the same name
+            'alwaysArray' => array(),   //array of xml tag names which should always become arrays
+            'autoArray' => true,        //only create arrays for tags which appear more than once
+            'textContent' => '$',       //key used for the text content of elements
+            'autoText' => true,         //skip textContent key if node has no attributes or child nodes
+            'keySearch' => false,       //optional search and replace on tag and attribute names
+            'keyReplace' => false       //replace values for above search values (as passed to str_replace())
+        );
+        $options = array_merge($defaults, $options);
+        $namespaces = $xml->getDocNamespaces();
+        $namespaces[''] = null; //add base (empty) namespace
+
+        //get attributes from all namespaces
+        $attributesArray = array();
+        foreach ($namespaces as $prefix => $namespace) {
+            foreach ($xml->attributes($namespace) as $attributeName => $attribute) {
+                //replace characters in attribute name
+                if ($options['keySearch']) $attributeName =
+                    str_replace($options['keySearch'], $options['keyReplace'], $attributeName);
+                $attributeKey = $options['attributePrefix']
+                    . ($prefix ? $prefix . $options['namespaceSeparator'] : '')
+                    . $attributeName;
+                $attributesArray[$attributeKey] = (string)$attribute;
+            }
+        }
+
+        //get child nodes from all namespaces
+        $tagsArray = array();
+        foreach ($namespaces as $prefix => $namespace) {
+            foreach ($xml->children($namespace) as $childXml) {
+                //recurse into child nodes
+                $childArray = self::xmlToArray($childXml, $options);
+                list($childTagName, $childProperties) = each($childArray);
+
+                //replace characters in tag name
+                if ($options['keySearch']) $childTagName =
+                    str_replace($options['keySearch'], $options['keyReplace'], $childTagName);
+                //add namespace prefix, if any
+                if ($prefix) $childTagName = $prefix . $options['namespaceSeparator'] . $childTagName;
+
+                if (!isset($tagsArray[$childTagName])) {
+                    //only entry with this key
+                    //test if tags of this type should always be arrays, no matter the element count
+                    $tagsArray[$childTagName] =
+                        in_array($childTagName, $options['alwaysArray']) || !$options['autoArray']
+                            ? array($childProperties) : $childProperties;
+                } elseif (
+                    is_array($tagsArray[$childTagName]) && array_keys($tagsArray[$childTagName])
+                    === range(0, count($tagsArray[$childTagName]) - 1)
+                ) {
+                    //key already exists and is integer indexed array
+                    $tagsArray[$childTagName][] = $childProperties;
+                } else {
+                    //key exists so convert to integer indexed array with previous value in position 0
+                    $tagsArray[$childTagName] = array($tagsArray[$childTagName], $childProperties);
+                }
+            }
+        }
+
+        //get text content of node
+        $textContentArray = array();
+        $plainText = trim((string)$xml);
+        if ($plainText !== '') $textContentArray[$options['textContent']] = $plainText;
+
+        //stick it all together
+        $propertiesArray = !$options['autoText'] || $attributesArray || $tagsArray || ($plainText === '')
+            ? array_merge($attributesArray, $tagsArray, $textContentArray) : $plainText;
+
+        //return node as array
+        return array(
+            $xml->getName() => $propertiesArray
+        );
     }
 
 }

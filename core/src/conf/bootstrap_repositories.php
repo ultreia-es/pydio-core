@@ -48,14 +48,25 @@ $REPOSITORIES[0] = array(
 		)
 	)
 );
-
 // DO NOT REMOVE THIS!
 // USER DASHBOARD
 $REPOSITORIES["ajxp_user"] = array(
     "DISPLAY"		    =>	"My Dashboard",
+    "AJXP_SLUG"		    =>  "dashboard",
     "DISPLAY_ID"		=>	"user_dash.title",
     "DESCRIPTION_ID"	=>	"user_dash.desc",
     "DRIVER"		    =>	"ajxp_user",
+    "DRIVER_OPTIONS"    => array(
+        "DEFAULT_RIGHTS" => "rw"
+    )
+);
+
+$REPOSITORIES["ajxp_home"] = array(
+    "DISPLAY"		    =>	"Welcome",
+    "AJXP_SLUG"		    =>  "welcome",
+    "DISPLAY_ID"		=>	"user_home.title",
+    "DESCRIPTION_ID"	=>	"user_home.desc",
+    "DRIVER"		    =>	"ajxp_home",
     "DRIVER_OPTIONS"    => array(
         "DEFAULT_RIGHTS" => "rw"
     )
@@ -95,6 +106,7 @@ $REPOSITORIES["fs_template"] = array(
 			),
             "meta.filehasher"   => array(),
             "meta.watch"        => array(),
+            "meta.syncable"     => array(),
             "meta.exif"   => array(
                 "meta_fields" => "COMPUTED_GPS.GPS_Latitude,COMPUTED_GPS.GPS_Longitude",
                 "meta_labels" => "Latitude,Longitude"
@@ -107,3 +119,17 @@ $REPOSITORIES["fs_template"] = array(
 	),
 
 );
+
+if(!is_file(AJXP_PLUGINS_REPOSITORIES_CACHE)){
+    $content = "<?php \n";
+    $boots = glob(AJXP_INSTALL_PATH."/".AJXP_PLUGINS_FOLDER."/*/repositories.php");
+    if($boots !== false){
+        foreach($boots as $b){
+            $content .= 'require_once("'.$b.'");'."\n";
+        }
+    }
+    $resWriteRepoCache = @file_put_contents(AJXP_PLUGINS_REPOSITORIES_CACHE, $content);
+}
+if(!isSet($resWriteRepoCache) || $resWriteRepoCache === true){
+    include_once(AJXP_PLUGINS_REPOSITORIES_CACHE);
+}

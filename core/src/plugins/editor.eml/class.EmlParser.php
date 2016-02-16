@@ -39,24 +39,20 @@ class EmlParser extends AJXP_Plugin
 
     public function switchAction($action, $httpVars, $filesVars)
     {
-        if(!isSet($this->actions[$action])) return false;
-
         $repository = ConfService::getRepository();
         if (!$repository->detectStreamWrapper(true)) {
             return false;
         }
 
-        $streamData = $repository->streamData;
-        $destStreamURL = $streamData["protocol"]."://".$repository->getId();
-        $wrapperClassName = $streamData["classname"];
-        if(empty($httpVars["file"])) return;
-        $file = $destStreamURL.AJXP_Utils::decodeSecureMagic($httpVars["file"]);
-        $mess = ConfService::getMessages();
-
-        $node = new AJXP_Node($file);
+        $selection = new UserSelection($repository, $httpVars);
+        if($selection->isEmpty()) return;
+        $node = $selection->getUniqueNode();
+        $file = $node->getUrl();
         AJXP_Controller::applyHook("node.read", array($node));
 
+        $wrapperClassName = AJXP_MetaStreamWrapper::actualRepositoryWrapperClass($repository->getId());
 
+        $mess = ConfService::getMessages();
         switch ($action) {
             case "eml_get_xml_structure":
                 $params = array(
@@ -158,6 +154,7 @@ class EmlParser extends AJXP_Plugin
                 $part = $this->_findAttachmentById($structure, $attachId);
                 if ($part !== false) {
                     $fake = new fsAccessDriver("fake", "");
+                    $fake->repository = $repository;
                     $fake->readFile($part->body, "file", $part->d_parameters['filename'], true);
                     exit();
                 } else {
@@ -190,6 +187,7 @@ class EmlParser extends AJXP_Plugin
                 $part = $this->_findAttachmentById($structure, $attachId);
                 AJXP_XMLWriter::header();
                 if ($part !== false) {
+                    $destStreamURL = $selection->currentBaseUrl();
                     if (isSet($httpVars["dest_repository_id"])) {
                         $destRepoId = $httpVars["dest_repository_id"];
                         if (AuthService::usersEnabled()) {
@@ -197,10 +195,8 @@ class EmlParser extends AJXP_Plugin
                             if(!$loggedUser->canWrite($destRepoId)) throw new Exception($mess[364]);
                         }
                         $destRepoObject = ConfService::getRepositoryById($destRepoId);
-                        $destRepoAccess = $destRepoObject->getAccessType();
-                        $plugin = AJXP_PluginsService::findPlugin("access", $destRepoAccess);
-                        $destWrapperData = $plugin->detectStreamWrapper(true);
-                        $destStreamURL = $destWrapperData["protocol"]."://$destRepoId";
+                        $destRepoObject->detectStreamWrapper(true);
+                        $destStreamURL = "pydio://$destRepoId";
                     }
                     $destFile = $destStreamURL.$destRep."/".$part->d_parameters['filename'];
                     $fp = fopen($destFile, "w");
@@ -231,7 +227,7 @@ class EmlParser extends AJXP_Plugin
         if($isParent) return;
         $currentNode = $ajxpNode->getUrl();
         $metadata = $ajxpNode->metadata;
-        $wrapperClassName = $ajxpNode->wrapperClassName;
+        $wrapperClassName = AJXP_MetaStreamWrapper::actualRepositoryWrapperClass($ajxpNode->getRepositoryId());
 
         $noMail = true;
         if ($metadata["is_file"] && ($wrapperClassName == "imapAccessWrapper" || preg_match("/\.eml$/i",$currentNode))) {
@@ -336,7 +332,7 @@ class EmlParser extends AJXP_Plugin
 
         $dom = new DOMDocument("1.0", "UTF-8");
         $dom->loadXML($outputVars["ob_output"]);
-        $mobileAgent = AJXP_Utils::userAgentIsIOS() || (strpos($_SERVER["HTTP_USER_AGENT"], "ajaxplorer-ios-client")!==false);
+        $mobileAgent = AJXP_Utils::userAgentIsIOS() || AJXP_Utils::userAgentIsNativePydioApp();
         $this->logDebug("MOBILE AGENT DETECTED?".$mobileAgent, $_SERVER["HTTP_USER_AGENT"]);
         if (EmlParser::$currentListingOnlyEmails === true) {
             // Replace all text attributes by the "from" value
@@ -347,7 +343,7 @@ class EmlParser extends AJXP_Plugin
                     $ar = explode("&lt;", $from);
                     $from = trim(array_shift($ar));
                     $text = ($index < 10?"0":"").$index.". ".$from." &gt; ".$child->getAttribute("eml_subject");
-                    if ((strpos($_SERVER["HTTP_USER_AGENT"], "ajaxplorer-ios-client")!==false)) {
+                    if (AJXP_Utils::userAgentIsNativePydioApp()) {
                         $text = html_entity_decode($text, ENT_COMPAT, "UTF-8");
                     }
                     $index ++;

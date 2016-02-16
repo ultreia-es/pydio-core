@@ -32,7 +32,7 @@ class ftpAccessDriver extends fsAccessDriver
     {
         parent::loadManifest();
         // BACKWARD COMPATIBILITY!
-        $res = $this->xPath->query('//param[@name="USER"] | //param[@name="PASS"] | //user_param[@name="USER"] | //user_param[@name="PASS"]');
+        $res = $this->getXPath()->query('//param[@name="USER"] | //param[@name="PASS"] | //user_param[@name="USER"] | //user_param[@name="PASS"]');
         foreach ($res as $node) {
             if ($node->getAttribute("name") == "USER") {
                 $node->setAttribute("name", "FTP_USER");
@@ -62,13 +62,13 @@ class ftpAccessDriver extends fsAccessDriver
         } else {
             $this->driverConf = array();
         }
-        $wrapperData = $this->detectStreamWrapper(true);
-        $this->wrapperClassName = $wrapperData["classname"];
-        $this->urlBase = $wrapperData["protocol"]."://".$this->repository->getId();
+        $this->detectStreamWrapper(true);
+        $this->urlBase = "pydio://".$this->repository->getId();
         $recycle = $this->repository->getOption("RECYCLE_BIN");
         if ($recycle != "") {
             RecycleBinManager::init($this->urlBase, "/".$recycle);
         }
+        //AJXP_PromptException::testOrPromptForCredentials("ftp_ws_credentials", $this->repository->getId());
     }
 
     public function uploadActions($action, $httpVars, $filesVars)
@@ -245,7 +245,7 @@ class ftpAccessDriver extends fsAccessDriver
         return false;
     }
 
-    public function deldir($location)
+    public function deldir($location, $repoData)
     {
         if (is_dir($location)) {
             $dirsToRecurse = array();
@@ -262,7 +262,7 @@ class ftpAccessDriver extends fsAccessDriver
             }
             closedir($all);
             foreach ($dirsToRecurse as $recurse) {
-                $this->deldir($recurse);
+                $this->deldir($recurse, $repoData);
             }
             rmdir($location);
         } else {
@@ -271,7 +271,7 @@ class ftpAccessDriver extends fsAccessDriver
                 if(!$test) throw new Exception("Cannot delete file ".$location);
             }
         }
-        if (basename(dirname($location)) == $this->repository->getOption("RECYCLE_BIN")) {
+        if (isSet($repoData["recycle"]) && basename(dirname($location)) == $repoData["recycle"]) {
             // DELETING FROM RECYCLE
             RecycleBinManager::deleteFromRecycle($location);
         }
@@ -285,8 +285,7 @@ class ftpAccessDriver extends fsAccessDriver
         $this->logDebug("Saving user temporary data", array($fileData));
         $files[] = $fileData;
         $user->saveTemporaryData("tmp_upload", $files);
-        if(strpos($_SERVER["HTTP_USER_AGENT"], "ajaxplorer-ios-client") !== false
-            || strpos($_SERVER["HTTP_USER_AGENT"], "Apache-HttpClient") !== false){
+        if(AJXP_Utils::userAgentIsNativePydioApp()){
             $this->logInfo("Up from",$_SERVER["HTTP_USER_AGENT"]." - direct triger of next to remote");
             $this->uploadActions("next_to_remote", array(), array());
         }

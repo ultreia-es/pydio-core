@@ -20,7 +20,7 @@
 */
 $mess=array(
 "Update Engine" => "Update Engine",
-"Automatic update of Pydio. Since version 3.3.3" => "Automatic update of Pydio. Since version 3.3.3",
+"Automatic update of Pydio. Since version 3.3.3" => "Detect necessary upgrades for Pydio packages.",
 "Update Site" => "Update Site",
 "Where to update" => "Where to update",
 "Preserve Files" => "Preserve Files",
@@ -30,9 +30,13 @@ $mess=array(
 "Update Channel" => "Update Channel",
 "Check stable or dev channel" => "Check stable or dev channel",
 "Proxy Host" => "Proxy Host",
-"Use a predefined proxy to establish connexion" => "Use a predefined proxy to establish connexion",
+"Use a predefined proxy to establish connexion" => "Use a predefined proxy to establish connection",
 "Proxy User" => "Proxy User",
 "Predefined proxy user name" => "Predefined proxy user name",
 "Proxy Pass" => "Proxy Pass",
 "Predefined proxy password" => "Predefined proxy password",
+"Proxy configuration" => "Proxy configuration",
+"Stable" => "Stable",
+"Development" => "Development",
+"Testing (blank)" => "Testing (blank)",
 );
